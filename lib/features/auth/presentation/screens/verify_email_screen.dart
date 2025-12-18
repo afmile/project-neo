@@ -82,11 +82,38 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
   }
   
   void _onCodeChanged(int index, String value) {
-    if (value.isNotEmpty && index < 7) {
+    // Handle paste - if pasted more than 1 char, distribute across fields
+    if (value.length > 1) {
+      final chars = value.split('');
+      for (var i = 0; i < chars.length && (index + i) < 8; i++) {
+        _controllers[index + i].text = chars[i];
+      }
+      final nextIndex = (index + chars.length).clamp(0, 7);
+      _focusNodes[nextIndex].requestFocus();
+      setState(() {});
+    } 
+    // Handle single char - move to next field
+    else if (value.isNotEmpty && index < 7) {
       _focusNodes[index + 1].requestFocus();
     }
+    
+    // Auto-verify when complete
     if (_otpCode.length == 8) {
+      FocusScope.of(context).unfocus();
       _handleVerify();
+    }
+    setState(() {}); // Update UI to show typed characters
+  }
+  
+  void _onKeyPressed(int index, RawKeyEvent event) {
+    // Handle backspace - move to previous field if current is empty
+    if (event is RawKeyDownEvent && 
+        event.logicalKey == LogicalKeyboardKey.backspace &&
+        _controllers[index].text.isEmpty && 
+        index > 0) {
+      _controllers[index - 1].clear();
+      _focusNodes[index - 1].requestFocus();
+      setState(() {});
     }
   }
 
@@ -236,51 +263,58 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
           width: 38,
           height: 48,
           margin: const EdgeInsets.symmetric(horizontal: 3),
-          child: TextField(
-            controller: _controllers[index],
-            focusNode: _focusNodes[index],
-            textAlign: TextAlign.center,
-            keyboardType: TextInputType.number,
-            maxLength: 1,
-            enabled: !authState.isLoading,
-            style: NeoTextStyles.headlineLarge.copyWith(
-              color: Theme.of(context).colorScheme.primary,
+          child: RawKeyboardListener(
+            focusNode: FocusNode(),
+            onKey: (event) => _onKeyPressed(index, event),
+            child: TextField(
+              controller: _controllers[index],
+              focusNode: _focusNodes[index],
+              textAlign: TextAlign.center,
+              keyboardType: TextInputType.number,
+              maxLength: null, // Allow paste
+              enabled: !authState.isLoading,
+              style: NeoTextStyles.headlineMedium.copyWith(
+                color: NeoColors.textPrimary,
+                fontWeight: FontWeight.bold,
+              ),
+              decoration: InputDecoration(
+                counterText: '',
+                filled: true,
+                fillColor: NeoColors.inputFill,
+                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(NeoSpacing.inputRadius),
+                  borderSide: BorderSide(
+                    color: _controllers[index].text.isNotEmpty
+                        ? Theme.of(context).colorScheme.primary
+                        : NeoColors.border,
+                    width: NeoSpacing.borderWidth,
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(NeoSpacing.inputRadius),
+                  borderSide: BorderSide(
+                    color: _controllers[index].text.isNotEmpty
+                        ? Theme.of(context).colorScheme.primary
+                        : NeoColors.border,
+                    width: NeoSpacing.borderWidth,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(NeoSpacing.inputRadius),
+                  borderSide: BorderSide(
+                    color: Theme.of(context).colorScheme.primary,
+                    width: 1.5,
+                  ),
+                ),
+              ),
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              onChanged: (value) => _onCodeChanged(index, value),
             ),
-            decoration: InputDecoration(
-              counterText: '',
-              filled: true,
-              fillColor: NeoColors.inputFill,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(NeoSpacing.inputRadius),
-                borderSide: BorderSide(
-                  color: _controllers[index].text.isNotEmpty
-                      ? Theme.of(context).colorScheme.primary
-                      : NeoColors.border,
-                  width: NeoSpacing.borderWidth,
-                ),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(NeoSpacing.inputRadius),
-                borderSide: BorderSide(
-                  color: _controllers[index].text.isNotEmpty
-                      ? Theme.of(context).colorScheme.primary
-                      : NeoColors.border,
-                  width: NeoSpacing.borderWidth,
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(NeoSpacing.inputRadius),
-                borderSide: BorderSide(
-                  color: Theme.of(context).colorScheme.primary,
-                  width: 1,
-                ),
-              ),
-            ),
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            onChanged: (value) => _onCodeChanged(index, value),
           ),
         );
       }),
     );
   }
 }
+
