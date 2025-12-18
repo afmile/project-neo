@@ -74,7 +74,20 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   Stream<UserModel?> get authStateChanges {
     return _client.auth.onAuthStateChange.asyncMap((event) async {
       if (event.session?.user == null) return null;
-      return await _fetchUserProfile(event.session!.user);
+      
+      try {
+        return await _fetchUserProfile(event.session!.user);
+      } catch (e) {
+        // If profile fetch fails, return basic user from auth data
+        final user = event.session!.user;
+        return UserModel(
+          id: user.id,
+          email: user.email ?? '',
+          username: user.userMetadata?['username'] ?? 
+                    'user_${user.id.substring(0, 8)}',
+          createdAt: DateTime.now(),
+        );
+      }
     });
   }
   
