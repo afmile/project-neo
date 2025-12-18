@@ -22,10 +22,10 @@ class VerifyEmailScreen extends ConsumerStatefulWidget {
 
 class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
   final List<TextEditingController> _controllers = List.generate(
-    6,
+    8,
     (_) => TextEditingController(),
   );
-  final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
+  final List<FocusNode> _focusNodes = List.generate(8, (_) => FocusNode());
   
   Timer? _resendTimer;
   int _resendCountdown = 0;
@@ -63,7 +63,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
   String get _otpCode => _controllers.map((c) => c.text).join();
   
   void _handleVerify() {
-    if (_otpCode.length == 6) {
+    if (_otpCode.length == 8) {
       ref.read(authProvider.notifier).verifyEmailOtp(_otpCode);
     }
   }
@@ -82,10 +82,10 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
   }
   
   void _onCodeChanged(int index, String value) {
-    if (value.isNotEmpty && index < 5) {
+    if (value.isNotEmpty && index < 7) {
       _focusNodes[index + 1].requestFocus();
     }
-    if (_otpCode.length == 6) {
+    if (_otpCode.length == 8) {
       _handleVerify();
     }
   }
@@ -179,7 +179,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
               const SizedBox(height: NeoSpacing.sm),
               
               Text(
-                'Ingresa el código de 6 dígitos\nenviado a ${authState.pendingEmail ?? "tu correo"}',
+                'Ingresa el código de 8 dígitos\nenviado a ${authState.pendingEmail ?? "tu correo"}',
                 style: NeoTextStyles.bodyMedium,
                 textAlign: TextAlign.center,
               ).animate().fadeIn(duration: 500.ms, delay: 150.ms),
@@ -196,7 +196,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
               // Verify button
               NeoButton(
                 text: 'Verificar',
-                onPressed: authState.isLoading || _otpCode.length < 6
+                onPressed: authState.isLoading || _otpCode.length < 8
                     ? null
                     : _handleVerify,
                 isLoading: authState.isLoading,
@@ -231,11 +231,11 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
   Widget _buildOtpInput(AuthState authState) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(6, (index) {
+      children: List.generate(8, (index) {
         return Container(
-          width: 48,
-          height: 56,
-          margin: const EdgeInsets.symmetric(horizontal: 4),
+          width: 38,
+          height: 48,
+          margin: const EdgeInsets.symmetric(horizontal: 3),
           child: TextField(
             controller: _controllers[index],
             focusNode: _focusNodes[index],

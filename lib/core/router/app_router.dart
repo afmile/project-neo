@@ -32,6 +32,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                         authState.status == AuthStatus.loading;
       final isAuthenticated = authState.status == AuthStatus.authenticated;
       final needsVerification = authState.status == AuthStatus.needsVerification;
+      final hasError = authState.status == AuthStatus.error;
       
       final isOnSplash = state.matchedLocation == '/';
       final isOnAuth = state.matchedLocation == '/login' || 
@@ -49,13 +50,23 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/verify-email';
       }
       
+      // If on verify screen and has pending email, stay there
+      if (isOnVerify && authState.pendingEmail != null) {
+        return null; // Stay on verify
+      }
+      
       // Authenticated - redirect away from auth screens
       if (isAuthenticated && (isOnAuth || isOnSplash || isOnVerify)) {
         return '/home';
       }
       
-      // Not authenticated - redirect to login
-      if (!isAuthenticated && !isOnAuth && !isOnSplash && !needsVerification) {
+      // If there's an error on auth screens, stay there
+      if (hasError && isOnAuth) {
+        return null; // Stay to show error
+      }
+      
+      // Not authenticated - redirect to login (but not if on auth screens already)
+      if (!isAuthenticated && !isOnAuth && !isOnSplash && !needsVerification && !isOnVerify) {
         return '/login';
       }
       
