@@ -64,10 +64,10 @@ class CommunityCard extends StatelessWidget {
                     end: Alignment.bottomCenter,
                     colors: [
                       Colors.transparent,
-                      Colors.black.withValues(alpha: 0.7),
-                      Colors.black.withValues(alpha: 0.95),
+                      Colors.black.withValues(alpha:0.6),
+                      Colors.black.withValues(alpha:0.9),
                     ],
-                    stops: const [0.0, 0.5, 1.0],
+                    stops: const [0.4, 0.75, 1.0],
                   ),
                 ),
               ),
@@ -75,34 +75,44 @@ class CommunityCard extends StatelessWidget {
             
             // Content at bottom
             Positioned(
-              left: NeoSpacing.sm,
-              right: NeoSpacing.sm,
-              bottom: NeoSpacing.sm,
+              left: 12,
+              right: 12,
+              bottom: 12,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
+                   Text(
                     title,
                     style: NeoTextStyles.labelLarge.copyWith(
-                      color: NeoColors.textPrimary,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      height: 1.1,
+                      shadows: [
+                        Shadow(
+                          offset: const Offset(0, 1),
+                          blurRadius: 2,
+                          color: Colors.black.withValues(alpha:0.5),
+                        ),
+                      ],
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Row(
                     children: [
                       Icon(
-                        Icons.people_outline_rounded,
-                        size: 12,
-                        color: NeoColors.textSecondary,
+                        Icons.people_alt_rounded,
+                        size: 14,
+                        color: Colors.white.withValues(alpha:0.8),
                       ),
                       const SizedBox(width: 4),
                       Text(
                         _formatMemberCount(memberCount),
                         style: NeoTextStyles.labelSmall.copyWith(
-                          color: NeoColors.textSecondary,
+                          color: Colors.white.withValues(alpha:0.8),
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],

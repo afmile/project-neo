@@ -20,9 +20,11 @@ final neoCoinBalanceProvider = Provider<int>((ref) => 1250);
 /// Provider for user's communities (empty by default for empty state demo)
 final myCommunitiesProvider = Provider<List<CommunityEntity>>((ref) => []);
 
-/// Provider for recommended communities (mock data)
+/// Provider for recommended communities (mock data, filtered by category)
 final recommendedCommunitiesProvider = Provider<List<CommunityEntity>>((ref) {
-  return [
+  final selectedCategory = ref.watch(selectedCategoryProvider);
+  
+  final allCommunities = [
     CommunityEntity(
       id: '1',
       ownerId: 'owner1',
@@ -32,6 +34,8 @@ final recommendedCommunitiesProvider = Provider<List<CommunityEntity>>((ref) {
       iconUrl: null,
       bannerUrl: null,
       memberCount: 45230,
+      categoryIds: ['anime', 'art', 'movies'],
+      language: 'es',
       createdAt: DateTime.now().subtract(const Duration(days: 365)),
       updatedAt: DateTime.now(),
     ),
@@ -44,6 +48,8 @@ final recommendedCommunitiesProvider = Provider<List<CommunityEntity>>((ref) {
       iconUrl: null,
       bannerUrl: null,
       memberCount: 23400,
+      categoryIds: ['tech', 'gaming'],
+      language: 'en',
       createdAt: DateTime.now().subtract(const Duration(days: 200)),
       updatedAt: DateTime.now(),
     ),
@@ -56,6 +62,8 @@ final recommendedCommunitiesProvider = Provider<List<CommunityEntity>>((ref) {
       iconUrl: null,
       bannerUrl: null,
       memberCount: 67800,
+      categoryIds: ['gaming', 'tech'],
+      language: 'en',
       createdAt: DateTime.now().subtract(const Duration(days: 150)),
       updatedAt: DateTime.now(),
     ),
@@ -68,6 +76,8 @@ final recommendedCommunitiesProvider = Provider<List<CommunityEntity>>((ref) {
       iconUrl: null,
       bannerUrl: null,
       memberCount: 89200,
+      categoryIds: ['kpop', 'music'],
+      language: 'es',
       createdAt: DateTime.now().subtract(const Duration(days: 300)),
       updatedAt: DateTime.now(),
     ),
@@ -80,15 +90,22 @@ final recommendedCommunitiesProvider = Provider<List<CommunityEntity>>((ref) {
       iconUrl: null,
       bannerUrl: null,
       memberCount: 12340,
+      categoryIds: ['art', 'anime'],
       createdAt: DateTime.now().subtract(const Duration(days: 90)),
       updatedAt: DateTime.now(),
     ),
   ];
+
+  if (selectedCategory == null) return allCommunities;
+  
+  return allCommunities.where((c) => c.categoryIds.contains(selectedCategory)).toList();
 });
 
-/// Provider for recent communities (mock data, sorted by creation)
+/// Provider for recent communities (mock data, filtered by category)
 final recentCommunitiesProvider = Provider<List<CommunityEntity>>((ref) {
-  return [
+  final selectedCategory = ref.watch(selectedCategoryProvider);
+  
+  final allCommunities = [
     CommunityEntity(
       id: '10',
       ownerId: 'owner10',
@@ -134,10 +151,28 @@ final recentCommunitiesProvider = Provider<List<CommunityEntity>>((ref) {
       iconUrl: null,
       bannerUrl: null,
       memberCount: 890,
+      categoryIds: ['sports', 'fitness'],
       createdAt: DateTime.now().subtract(const Duration(days: 10)),
       updatedAt: DateTime.now(),
     ),
+    CommunityEntity(
+      id: '14',
+      ownerId: 'owner14',
+      title: 'Historias de Terror',
+      slug: 'historias-terror',
+      description: 'Creepy pastas y leyendas',
+      iconUrl: null,
+      bannerUrl: null,
+      memberCount: 5666,
+      categoryIds: ['horror', 'movies'],
+      createdAt: DateTime.now().subtract(const Duration(days: 1)),
+      updatedAt: DateTime.now(),
+    ),
   ];
+
+  if (selectedCategory == null) return allCommunities;
+
+  return allCommunities.where((c) => c.categoryIds.contains(selectedCategory)).toList();
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -168,6 +203,7 @@ final categoryChipsProvider = Provider<List<CategoryChip>>((ref) {
     CategoryChip(id: 'kpop', label: 'K-Pop', emoji: '🎤'),
     CategoryChip(id: 'sports', label: 'Deportes', emoji: '⚽'),
     CategoryChip(id: 'movies', label: 'Películas', emoji: '🎬'),
+    CategoryChip(id: 'horror', label: 'Terror', emoji: '👻'),
   ];
 });
 
@@ -176,3 +212,76 @@ final searchQueryProvider = StateProvider<String>((ref) => '');
 
 /// Provider for search focus state
 final isSearchFocusedProvider = StateProvider<bool>((ref) => false);
+
+/// Provider for selected category filter
+final selectedCategoryProvider = StateProvider<String?>((ref) => null);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DISCOVERY - NEW
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Discovery Filters
+final discoverySearchProvider = StateProvider<String>((ref) => '');
+final discoveryCategoryProvider = StateProvider<String?>((ref) => null);
+final discoveryLanguageProvider = StateProvider<String>((ref) => 'es'); // 'es', 'en', 'all'
+
+/// Provider for ALL communities (Mock) plus language field
+final allCommunitiesProvider = Provider<List<CommunityEntity>>((ref) {
+  // Combine recommended and recent for a full list demo, making sure ID uniqueness or just reuse logic
+  // For simplicity, we just declare a master list here that includes everything above + more
+  return [
+    CommunityEntity(
+      id: '1', title: 'Anime & Manga', slug: 'anime-manga', 
+      memberCount: 45230, categoryIds: ['anime', 'art'], language: 'es', 
+      ownerId: 'o1', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+    CommunityEntity(
+      id: '2', title: 'Tech & Coding', slug: 'tech-coding', 
+      memberCount: 23400, categoryIds: ['tech'], language: 'en', 
+      ownerId: 'o2', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+    CommunityEntity(
+      id: '3', title: 'Gaming Zone', slug: 'gaming-zone', 
+      memberCount: 67800, categoryIds: ['gaming'], language: 'en', 
+      ownerId: 'o3', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+    CommunityEntity(
+      id: '10', title: 'Música Latina', slug: 'musica-latina', 
+      memberCount: 3450, categoryIds: ['music'], language: 'es', 
+      ownerId: 'o10', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+     CommunityEntity(
+      id: '14', title: 'Historias de Terror', slug: 'historias-terror', 
+      memberCount: 5666, categoryIds: ['horror'], language: 'es', 
+      ownerId: '14', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+     CommunityEntity(
+      id: '99', title: 'Global News', slug: 'global-news', 
+      memberCount: 120000, categoryIds: ['tech', 'music'], language: 'en', 
+      ownerId: '99', createdAt: DateTime.now(), updatedAt: DateTime.now()),
+  ];
+});
+
+/// Discovery Filtered Provider
+final discoveryFilteredCommunitiesProvider = Provider<List<CommunityEntity>>((ref) {
+  final all = ref.watch(allCommunitiesProvider);
+  final search = ref.watch(discoverySearchProvider).toLowerCase();
+  final category = ref.watch(discoveryCategoryProvider);
+  final language = ref.watch(discoveryLanguageProvider); // 'es', 'en', 'all'
+
+  return all.where((c) {
+    // Language Filter
+    if (language != 'all' && c.language != language) {
+      return false;
+    }
+    
+    // Category Filter
+    if (category != null && !c.categoryIds.contains(category)) {
+      return false;
+    }
+    
+    // Search Filter
+    if (search.isNotEmpty) {
+      final matchesTitle = c.title.toLowerCase().contains(search);
+      // final matchesTag = c.categoryIds.any((t) => t.contains(search));
+      if (!matchesTitle) return false;
+    }
+    
+    return true;
+  }).toList();
+});

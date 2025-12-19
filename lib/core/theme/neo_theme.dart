@@ -110,7 +110,7 @@ class NeoSpacing {
 class NeoTextStyles {
   NeoTextStyles._();
   
-  static TextStyle get _baseStyle => GoogleFonts.inter(
+  static TextStyle get _baseStyle => GoogleFonts.poppins(
     color: NeoColors.textPrimary,
   );
   

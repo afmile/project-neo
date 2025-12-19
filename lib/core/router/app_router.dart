@@ -13,6 +13,8 @@ import '../../features/auth/presentation/screens/verify_email_screen.dart';
 import '../../features/auth/presentation/screens/splash_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/community/presentation/screens/community_screen.dart';
+import '../../features/notifications/presentation/screens/notifications_screen.dart';
+import '../../features/discovery/presentation/screens/discovery_screen.dart';
 
 /// Global navigator key
 final rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -120,6 +122,20 @@ final routerProvider = Provider<GoRouter>((ref) {
           final slug = state.pathParameters['slug']!;
           return CommunityScreen(slug: slug);
         },
+      ),
+
+      // Notifications
+      GoRoute(
+        path: '/notifications',
+        name: 'notifications',
+        builder: (context, state) => const NotificationsScreen(),
+      ),
+
+      // Discovery
+      GoRoute(
+        path: '/discovery',
+        name: 'discovery',
+        builder: (context, state) => const DiscoveryScreen(),
       ),
     ],
     

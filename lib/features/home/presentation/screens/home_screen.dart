@@ -9,6 +9,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/home_providers.dart';
+import 'package:go_router/go_router.dart';
+import '../../../../features/chat/presentation/screens/chats_screen.dart';
 import '../widgets/community_card.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -50,52 +52,50 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         bottom: false,
         child: Column(
           children: [
-            // Custom Header
+            // Shared Header
             _buildHeader().animate().fadeIn(duration: 400.ms),
             
-            // Search Bar
-            _buildSearchBar().animate().fadeIn(duration: 400.ms, delay: 100.ms),
-            
-            // Category Chips (expandable)
-            _buildCategoryChips(),
-            
-            // Body
+            // Body Content
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.only(bottom: 100),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: NeoSpacing.md),
-                    
-                    // Mis Comunidades
-                    _buildMyCommunities()
-                        .animate()
-                        .fadeIn(duration: 400.ms, delay: 200.ms),
-                    
-                    const SizedBox(height: NeoSpacing.lg),
-                    
-                    // Recomendadas
-                    _buildRecommendedSection()
-                        .animate()
-                        .fadeIn(duration: 400.ms, delay: 300.ms),
-                    
-                    const SizedBox(height: NeoSpacing.lg),
-                    
-                    // Recientes
-                    _buildRecentSection()
-                        .animate()
-                        .fadeIn(duration: 400.ms, delay: 400.ms),
-                    
-                    const SizedBox(height: NeoSpacing.lg),
-                  ],
-                ),
-              ),
+              child: _currentNavIndex == 2 
+                  ? const ChatsScreen().animate().fadeIn(duration: 300.ms)
+                  : _buildHomeBody(), 
             ),
           ],
         ),
       ),
       bottomNavigationBar: _buildBottomNav(),
+    );
+  }
+
+  Widget _buildHomeBody() {
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.only(bottom: 100), // Space for bottom nav
+      child: Column(
+        children: [
+           // Search Bar
+           _buildSearchBar().animate().fadeIn(duration: 400.ms, delay: 100.ms),
+           
+           // Categories (Always visible)
+           _buildCategoryChips().animate().fadeIn(duration: 400.ms, delay: 150.ms),
+           
+           const SizedBox(height: NeoSpacing.md),
+
+           // My Communities
+           _buildMyCommunities().animate().fadeIn(duration: 400.ms, delay: 200.ms),
+           
+           const SizedBox(height: NeoSpacing.lg),
+           
+           // Recommended
+           _buildRecommendedSection().animate().fadeIn(duration: 400.ms, delay: 300.ms),
+           
+           const SizedBox(height: NeoSpacing.lg),
+           
+           // Recent
+           _buildRecentSection().animate().fadeIn(duration: 400.ms, delay: 400.ms),
+        ],
+      ),
     );
   }
 
@@ -111,7 +111,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: NeoSpacing.md,
-        vertical: NeoSpacing.sm,
+        vertical: NeoSpacing.md, // More balanced padding
       ),
       color: Colors.grey[900],
       child: Row(
@@ -120,8 +120,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           GestureDetector(
             onTap: () => _showProfileMenu(),
             child: Container(
-              width: 44,
-              height: 44,
+              width: 40, // Slightly smaller to be elegant
+              height: 40,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: NeoColors.accent.withValues(alpha: 0.2),
@@ -144,75 +144,97 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           
           const SizedBox(width: NeoSpacing.md),
           
-          // Greeting
+          // Greeting (Single line)
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Hola,',
-                  style: NeoTextStyles.bodySmall.copyWith(
-                    color: NeoColors.textSecondary,
-                  ),
-                ),
-                Text(
-                  username,
-                  style: NeoTextStyles.headlineSmall.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          // NeoCoins Pill
-          GestureDetector(
-            onTap: () => _goToMarket(),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: NeoSpacing.md,
-                vertical: NeoSpacing.sm,
-              ),
-              decoration: BoxDecoration(
-                color: NeoColors.card,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: NeoColors.border,
-                  width: NeoSpacing.borderWidth,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+            child: RichText(
+              text: TextSpan(
                 children: [
-                  Container(
-                    width: 20,
-                    height: 20,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.amber,
-                          Colors.orange.shade700,
-                        ],
-                      ),
-                    ),
-                    child: const Icon(
-                      Icons.monetization_on_rounded,
-                      size: 14,
-                      color: Colors.white,
+                  TextSpan(
+                    text: 'Hola, ',
+                    style: NeoTextStyles.bodyLarge.copyWith(
+                      color: NeoColors.textSecondary,
                     ),
                   ),
-                  const SizedBox(width: NeoSpacing.sm),
-                  Text(
-                    _formatNumber(neoCoins),
-                    style: NeoTextStyles.labelLarge.copyWith(
-                      color: Colors.amber,
+                  TextSpan(
+                    text: username,
+                    style: NeoTextStyles.bodyLarge.copyWith(
+                      color: Colors.white,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],
               ),
             ),
+          ),
+          
+          // Coins & Notifications
+          Row(
+            children: [
+               // NeoCoins Pill
+              GestureDetector(
+                onTap: () => _goToMarket(),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: NeoSpacing.md,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: NeoColors.card,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: NeoColors.border,
+                      width: NeoSpacing.borderWidth,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.amber,
+                              Colors.orange.shade700,
+                            ],
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.monetization_on_rounded,
+                          size: 10,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        _formatNumber(neoCoins),
+                        style: NeoTextStyles.labelMedium.copyWith(
+                          color: Colors.amber,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              
+              const SizedBox(width: NeoSpacing.sm),
+              
+              // Notifications Icon
+              IconButton(
+                onPressed: () => context.push('/notifications'),
+                icon: const Icon(
+                  Icons.notifications_none_rounded,
+                  color: Colors.white,
+                ),
+                style: IconButton.styleFrom(
+                  backgroundColor: NeoColors.card,
+                  padding: const EdgeInsets.all(8),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -238,50 +260,61 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Container(
       padding: const EdgeInsets.all(NeoSpacing.md),
       color: Colors.grey[900],
-      child: TextField(
-        controller: _searchController,
-        focusNode: _searchFocusNode,
-        style: NeoTextStyles.bodyMedium.copyWith(
-          color: NeoColors.textPrimary,
+      child: Container(
+        height: 50,
+        decoration: BoxDecoration(
+           boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha:0.2),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
-        decoration: InputDecoration(
-          hintText: 'Buscar comunidades...',
-          hintStyle: NeoTextStyles.bodyMedium.copyWith(
-            color: NeoColors.textTertiary,
+        child: TextField(
+          controller: _searchController,
+          focusNode: _searchFocusNode,
+          style: NeoTextStyles.bodyMedium.copyWith(
+            color: NeoColors.textPrimary,
           ),
-          prefixIcon: Icon(
-            Icons.search_rounded,
-            color: NeoColors.textTertiary,
-            size: 22,
-          ),
-          filled: true,
-          fillColor: NeoColors.inputFill,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: NeoSpacing.md,
-            vertical: 12,
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(
-              color: NeoColors.border,
-              width: NeoSpacing.borderWidth,
+          decoration: InputDecoration(
+            hintText: 'Buscar comunidades...',
+            hintStyle: NeoTextStyles.bodyMedium.copyWith(
+              color: NeoColors.textTertiary,
+            ),
+            prefixIcon: Icon(
+              Icons.search_rounded,
+              color: NeoColors.textTertiary,
+              size: 24,
+            ),
+            filled: true,
+            fillColor: Colors.grey[850],
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: NeoSpacing.md,
+              vertical: 0, // Centered vertically by Container height
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(30),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(30),
+              borderSide: const BorderSide(
+                color: Colors.transparent,
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(30),
+              borderSide: const BorderSide(
+                color: NeoColors.accent,
+                width: 1,
+              ),
             ),
           ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(
-              color: NeoColors.accent,
-              width: 1,
-            ),
-          ),
+          onChanged: (value) {
+            ref.read(searchQueryProvider.notifier).state = value;
+          },
         ),
-        onChanged: (value) {
-          ref.read(searchQueryProvider.notifier).state = value;
-        },
       ),
     );
   }
@@ -291,52 +324,57 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildCategoryChips() {
-    final isExpanded = ref.watch(isSearchFocusedProvider);
     final categories = ref.watch(categoryChipsProvider);
+    final selectedCategory = ref.watch(selectedCategoryProvider);
     
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      height: isExpanded ? 56 : 0,
-      color: Colors.grey[900],
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 200),
-        opacity: isExpanded ? 1.0 : 0.0,
-        child: ListView.builder(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(
-            horizontal: NeoSpacing.md,
-            vertical: NeoSpacing.sm,
-          ),
-          itemCount: categories.length,
-          itemBuilder: (context, index) {
-            final category = categories[index];
-            return Padding(
-              padding: const EdgeInsets.only(right: NeoSpacing.sm),
-              child: ActionChip(
-                avatar: Text(category.emoji, style: const TextStyle(fontSize: 14)),
-                label: Text(
-                  category.label,
-                  style: NeoTextStyles.labelMedium.copyWith(
-                    color: NeoColors.textPrimary,
-                  ),
-                ),
-                backgroundColor: NeoColors.card,
-                side: const BorderSide(
-                  color: NeoColors.border,
-                  width: NeoSpacing.borderWidth,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                onPressed: () {
-                  _searchController.text = category.label;
-                  ref.read(searchQueryProvider.notifier).state = category.label;
-                },
-              ),
-            );
-          },
+    return Container(
+      height: 60, // Fixed height, always visible
+      color: Colors.black, // Match body background to blend in
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(
+          horizontal: NeoSpacing.md,
+          vertical: NeoSpacing.sm,
         ),
+        itemCount: categories.length,
+        itemBuilder: (context, index) {
+          final category = categories[index];
+          final isSelected = category.id == selectedCategory;
+          
+          return Padding(
+            padding: const EdgeInsets.only(right: NeoSpacing.sm),
+            child: ActionChip(
+              avatar: isSelected ? null : Text(category.emoji, style: const TextStyle(fontSize: 14)),
+              label: Text(
+                category.label,
+                style: NeoTextStyles.labelMedium.copyWith(
+                  color: isSelected ? Colors.white : NeoColors.textPrimary,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+              backgroundColor: isSelected ? NeoColors.accent : NeoColors.card,
+              side: BorderSide(
+                color: isSelected ? NeoColors.accent : NeoColors.border,
+                width: NeoSpacing.borderWidth,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              onPressed: () {
+                if (isSelected) {
+                  ref.read(selectedCategoryProvider.notifier).state = null;
+                } else {
+                  ref.read(selectedCategoryProvider.notifier).state = category.id;
+                  // Clear search when selecting a category to avoid confusion
+                  if (_searchController.text.isNotEmpty) {
+                    _searchController.clear();
+                    ref.read(searchQueryProvider.notifier).state = '';
+                  }
+                }
+              },
+            ),
+          );
+        },
       ),
     );
   }
@@ -388,38 +426,57 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       margin: const EdgeInsets.symmetric(horizontal: NeoSpacing.md),
       padding: const EdgeInsets.all(NeoSpacing.lg),
       decoration: BoxDecoration(
-        color: NeoColors.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: NeoColors.border,
-          width: NeoSpacing.borderWidth,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF1A1A1A),
+            Colors.black,
+          ],
         ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white10,
+          width: 0.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha:0.5),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         children: [
           Container(
-            width: 64,
-            height: 64,
+            width: 56,
+            height: 56,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: NeoColors.accent.withValues(alpha: 0.15),
+              color: NeoColors.accent.withValues(alpha:0.1),
             ),
             child: const Icon(
-              Icons.groups_rounded,
-              size: 32,
+              Icons.group_add_rounded,
+              size: 28,
               color: NeoColors.accent,
             ),
           ),
           const SizedBox(height: NeoSpacing.md),
           Text(
-            '¡Aún no tienes comunidades!',
-            style: NeoTextStyles.headlineSmall,
+            '¡Comienza tu viaje!',
+            style: NeoTextStyles.headlineSmall.copyWith(
+               fontWeight: FontWeight.bold,
+               letterSpacing: 0.5,
+            ),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: NeoSpacing.sm),
+          const SizedBox(height: NeoSpacing.xs),
           Text(
-            'Únete a una comunidad existente o crea la tuya propia',
-            style: NeoTextStyles.bodyMedium,
+            'Únete a comunidades o crea la tuya',
+            style: NeoTextStyles.bodyMedium.copyWith(
+              color: NeoColors.textSecondary.withValues(alpha:0.8),
+            ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: NeoSpacing.lg),
@@ -427,13 +484,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () {},
+                  onPressed: () => context.push('/discovery'),
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(
-                      color: NeoColors.border,
-                      width: NeoSpacing.borderWidth,
+                      color: Colors.white10,
+                      width: 1,
                     ),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   child: Text(
                     'Explorar',
@@ -449,7 +509,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   onPressed: () {},
                   style: ElevatedButton.styleFrom(
                     backgroundColor: NeoColors.accent,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    elevation: 4,
+                    shadowColor: NeoColors.accent.withValues(alpha:0.4),
+                     shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   child: Text(
                     'Crear',
@@ -592,11 +657,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(
-            horizontal: NeoSpacing.md,
+            horizontal: NeoSpacing.xl,
             vertical: NeoSpacing.sm,
           ),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _buildNavItem(
                 icon: Icons.home_rounded,
@@ -604,7 +669,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 index: 0,
               ),
               _buildNavItem(
-                icon: Icons.add_circle,
+                icon: Icons.add_rounded,
                 label: 'Crear',
                 index: 1,
                 isCenter: true,
@@ -613,11 +678,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 icon: Icons.chat_bubble_rounded,
                 label: 'Chats',
                 index: 2,
-              ),
-              _buildNavItem(
-                icon: Icons.person_rounded,
-                label: 'Perfil',
-                index: 3,
               ),
             ],
           ),
@@ -647,39 +707,53 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (isCenter)
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    colors: [NeoColors.accent, Color(0xFF8B5CF6)],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: NeoColors.accent.withValues(alpha: 0.4),
-                      blurRadius: 12,
-                      spreadRadius: 2,
+              SizedBox(
+                width: 56,
+                height: 56,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      colors: [NeoColors.accent, Color(0xFF8B5CF6)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.add_rounded,
-                  color: Colors.white,
-                  size: 28,
+                    boxShadow: [
+                      BoxShadow(
+                        color: NeoColors.accent.withValues(alpha: 0.4),
+                        blurRadius: 15,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.add_rounded,
+                      color: Colors.white,
+                      size: 32,
+                    ),
+                  ),
                 ),
               )
-            else
-              Icon(icon, color: color, size: 26),
-            if (!isCenter) ...[
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: NeoTextStyles.labelSmall.copyWith(
-                  color: color,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                ),
-              ),
+            else ...[
+               Icon(
+                 icon, 
+                 color: color, 
+                 size: 28,
+               ),
+               if (isSelected) ...[
+                 const SizedBox(height: 4),
+                 SizedBox(
+                   width: 4, 
+                   height: 4, 
+                   child: DecoratedBox(
+                     decoration: const BoxDecoration(
+                       color: NeoColors.accent, 
+                       shape: BoxShape.circle,
+                     ),
+                   ),
+                 ),
+               ],
             ],
           ],
         ),
@@ -727,12 +801,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
+            SizedBox(
               width: 40,
               height: 4,
-              decoration: BoxDecoration(
-                color: NeoColors.border,
-                borderRadius: BorderRadius.circular(2),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: NeoColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
             const SizedBox(height: NeoSpacing.lg),

@@ -23,6 +23,8 @@ class CommunityModel extends CommunityEntity {
     super.isPrivate,
     super.inviteOnly,
     super.tabs,
+    super.categoryIds,
+    super.language = 'es',
     required super.createdAt,
     required super.updatedAt,
   });
@@ -32,6 +34,9 @@ class CommunityModel extends CommunityEntity {
     // Parse tabs if included
     final tabsJson = json['community_tabs'] as List<dynamic>?;
     final tabs = tabsJson?.map((t) => CommunityTabModel.fromJson(t as Map<String, dynamic>)).toList() ?? [];
+    
+    // Parse categories if included (assuming array of strings or view)
+    final categories = (json['category_ids'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [];
 
     return CommunityModel(
       id: json['id'] as String,
@@ -50,6 +55,8 @@ class CommunityModel extends CommunityEntity {
       isPrivate: json['is_private'] as bool? ?? false,
       inviteOnly: json['invite_only'] as bool? ?? false,
       tabs: tabs,
+      categoryIds: categories,
+      language: json['language'] as String? ?? 'es',
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -69,7 +76,9 @@ class CommunityModel extends CommunityEntity {
     'status': status.name,
     'is_private': isPrivate,
     'invite_only': inviteOnly,
+    'language': language,
   };
+
 
   /// For creating new community
   Map<String, dynamic> toInsertJson() => {
@@ -83,6 +92,7 @@ class CommunityModel extends CommunityEntity {
     'is_nsfw_flag': isNsfw,
     'is_private': isPrivate,
     'invite_only': inviteOnly,
+    'language': language,
   };
 
   static CommunityStatus _parseStatus(String? status) {

@@ -25,6 +25,8 @@ class CommunityEntity extends Equatable {
   final bool isPrivate;
   final bool inviteOnly;
   final List<CommunityTabEntity> tabs;
+  final List<String> categoryIds;
+  final String language;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -43,6 +45,8 @@ class CommunityEntity extends Equatable {
     this.isPrivate = false,
     this.inviteOnly = false,
     this.tabs = const [],
+    this.categoryIds = const [],
+    this.language = 'es',
     required this.createdAt,
     required this.updatedAt,
   });
@@ -57,7 +61,7 @@ class CommunityEntity extends Equatable {
   List<Object?> get props => [
     id, ownerId, title, slug, description, iconUrl, bannerUrl,
     theme, isNsfw, status, memberCount, isPrivate, inviteOnly,
-    tabs, createdAt, updatedAt,
+    tabs, categoryIds, language, createdAt, updatedAt,
   ];
 }
 
