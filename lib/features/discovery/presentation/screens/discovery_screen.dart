@@ -113,8 +113,8 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
                       imageUrl: community.bannerUrl, // Might be null, Card handles it
                       memberCount: community.memberCount,
                       onTap: () {
-                          // Standard route to community details
-                          context.push('/community/${community.slug}');
+                          // Navigate to community home with entity
+                          context.push('/community_home', extra: community);
                       },
                     );
                   },

@@ -12,7 +12,9 @@ import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/auth/presentation/screens/verify_email_screen.dart';
 import '../../features/auth/presentation/screens/splash_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
+import '../../features/community/domain/entities/community_entity.dart';
 import '../../features/community/presentation/screens/community_screen.dart';
+import '../../features/community/presentation/screens/community_home_screen.dart';
 import '../../features/notifications/presentation/screens/notifications_screen.dart';
 import '../../features/discovery/presentation/screens/discovery_screen.dart';
 
@@ -121,6 +123,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final slug = state.pathParameters['slug']!;
           return CommunityScreen(slug: slug);
+        },
+      ),
+
+      // Community home route with entity object
+      GoRoute(
+        path: '/community_home',
+        name: 'community_home',
+        builder: (context, state) {
+          final community = state.extra as CommunityEntity;
+          return CommunityHomeScreen(community: community);
         },
       ),
 

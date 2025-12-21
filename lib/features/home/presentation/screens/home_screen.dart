@@ -546,7 +546,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             title: community.title,
             imageUrl: community.bannerUrl,
             memberCount: community.memberCount,
-            onTap: () => _goToCommunity(community.id),
+            onTap: () => _goToCommunity(community),
           );
         },
       ),
@@ -785,8 +785,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // TODO: Navigate to NeoCoins market
   }
 
-  void _goToCommunity(String id) {
-    // TODO: Navigate to community screen
+  void _goToCommunity(dynamic communityOrId) {
+    // Navigate to community home screen with entity
+    if (communityOrId is String) {
+      // If it's just an ID, we need to find the entity
+      // For now, this shouldn't happen as we'll pass the full entity
+      return;
+    }
+    context.push('/community_home', extra: communityOrId);
   }
 
   void _showProfileMenu() {
