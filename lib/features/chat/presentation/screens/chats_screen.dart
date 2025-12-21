@@ -46,16 +46,16 @@ class ChatsScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      // Optional: No AppBar needed if HomeScreen Header is present, but requirements implied a separate tab content.
-      // Assuming it sits inside HomeScreen body, so just the list.
-      body: ListView.separated(
-        padding: const EdgeInsets.all(NeoSpacing.md),
-        itemCount: chats.length,
-        separatorBuilder: (context, index) => const SizedBox(height: NeoSpacing.sm),
-        itemBuilder: (context, index) {
-          final chat = chats[index];
-          return _ChatListItem(chat: chat);
-        },
+      body: SafeArea(
+        child: ListView.separated(
+          padding: const EdgeInsets.all(NeoSpacing.md),
+          itemCount: chats.length,
+          separatorBuilder: (context, index) => const SizedBox(height: NeoSpacing.sm),
+          itemBuilder: (context, index) {
+            final chat = chats[index];
+            return _ChatListItem(chat: chat);
+          },
+        ),
       ),
     );
   }

@@ -94,15 +94,20 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
         background: Stack(
           fit: StackFit.expand,
           children: [
-            // Cover Image
-            if (coverUrl != null)
-              Image.network(
-                coverUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _buildPlaceholderBackground(),
-              )
-            else
-              _buildPlaceholderBackground(),
+            // Cover Image with Hero animation
+            Hero(
+              tag: 'community_cover_${widget.community.id}',
+              child: Material(
+                type: MaterialType.transparency,
+                child: coverUrl != null
+                    ? Image.network(
+                        coverUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _buildPlaceholderBackground(),
+                      )
+                    : _buildPlaceholderBackground(),
+              ),
+            ),
 
             // Strong dark gradient for contrast
             Container(

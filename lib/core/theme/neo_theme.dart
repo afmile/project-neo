@@ -358,6 +358,17 @@ class NeoTheme {
         thickness: NeoSpacing.borderWidth,
       ),
       
+      // Page transitions for hierarchical navigation
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: ZoomPageTransitionsBuilder(), // Material 3 style - zoom from center
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(), // Native iOS slide
+          TargetPlatform.linux: ZoomPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.windows: ZoomPageTransitionsBuilder(),
+        },
+      ),
+      
       progressIndicatorTheme: ProgressIndicatorThemeData(
         color: accentColor,
         linearTrackColor: NeoColors.border,

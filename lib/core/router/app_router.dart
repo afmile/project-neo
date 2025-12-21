@@ -1,6 +1,20 @@
 /// Project Neo - Router Configuration
 ///
 /// GoRouter setup with authentication redirect.
+///
+/// NAVIGATION ARCHITECTURE:
+/// 
+/// Level 0: Structural Navigation (Tabs)
+/// - Context: Moving between Home, Discovery, Chats, Profile
+/// - Animation: ZERO (Instant switching)
+/// - Implementation: IndexedStack in HomeScreen with no transitions
+/// - Rationale: These are "rooms in the same house" - you don't travel, you're simply there
+/// 
+/// Level 1: Hierarchical Navigation (Drill-Down)
+/// - Context: Entering a Community, opening a Blog, viewing a Chat
+/// - Animation: Native platform animations (Zoom on Android, Slide on iOS)
+/// - Implementation: Inherits from ThemeData.pageTransitionsTheme
+/// - Rationale: Provides clear visual feedback that you're "entering" content
 library;
 
 import 'package:flutter/material.dart';
@@ -128,7 +142,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
 
-      // Community home route with entity object
+      // Community home route - Level 1: Hierarchical Navigation
+      // Uses native platform animations (Zoom on Android, Slide on iOS)
+      // Hero animations work independently of page transitions
       GoRoute(
         path: '/community_home',
         name: 'community_home',

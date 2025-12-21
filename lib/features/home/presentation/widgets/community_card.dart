@@ -13,6 +13,7 @@ class CommunityCard extends StatelessWidget {
   final int memberCount;
   final VoidCallback? onTap;
   final Color? accentColor;
+  final String? communityId; // For Hero animation
 
   const CommunityCard({
     super.key,
@@ -21,6 +22,7 @@ class CommunityCard extends StatelessWidget {
     required this.memberCount,
     this.onTap,
     this.accentColor,
+    this.communityId,
   });
 
   @override
@@ -44,15 +46,29 @@ class CommunityCard extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: Stack(
           children: [
-            // Background gradient or image
+            // Background gradient or image with Hero animation
             Positioned.fill(
-              child: imageUrl != null
-                  ? Image.network(
-                      imageUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _buildPlaceholderBackground(accent),
+              child: communityId != null
+                  ? Hero(
+                      tag: 'community_cover_$communityId',
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: imageUrl != null
+                            ? Image.network(
+                                imageUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => _buildPlaceholderBackground(accent),
+                              )
+                            : _buildPlaceholderBackground(accent),
+                      ),
                     )
-                  : _buildPlaceholderBackground(accent),
+                  : (imageUrl != null
+                      ? Image.network(
+                          imageUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _buildPlaceholderBackground(accent),
+                        )
+                      : _buildPlaceholderBackground(accent)),
             ),
             
             // Dark gradient overlay

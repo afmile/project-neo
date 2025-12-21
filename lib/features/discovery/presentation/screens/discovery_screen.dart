@@ -330,6 +330,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
                 title: community.title,
                 imageUrl: community.bannerUrl,
                 memberCount: community.memberCount,
+                communityId: community.id,
                 onTap: () => context.push('/community_home', extra: community),
               );
             },
@@ -379,6 +380,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
                 title: community.title,
                 imageUrl: community.bannerUrl,
                 memberCount: community.memberCount,
+                communityId: community.id,
                 onTap: () => context.push('/community_home', extra: community),
               );
             },
@@ -439,6 +441,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
                   title: community.title,
                   imageUrl: community.bannerUrl,
                   memberCount: community.memberCount,
+                  communityId: community.id,
                   onTap: () => context.push('/community_home', extra: community),
                 );
               },

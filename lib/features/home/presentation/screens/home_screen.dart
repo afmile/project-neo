@@ -50,11 +50,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         bottom: false,
         child: Column(
           children: [
-            // Shared Header (hide on Profile tab)
-            if (_currentNavIndex != 3)
+            // Shared Header (ONLY on Home tab)
+            if (_currentNavIndex == 0)
               _buildHeader().animate().fadeIn(duration: 400.ms),
             
-            // Body Content
+            // Body Content - Instant tab switching (Level 0: Structural Navigation)
             Expanded(
               child: IndexedStack(
                 index: _currentNavIndex,
@@ -544,6 +544,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             title: community.title,
             imageUrl: community.bannerUrl,
             memberCount: community.memberCount,
+            communityId: community.id,
             onTap: () => _goToCommunity(community),
           );
         },
