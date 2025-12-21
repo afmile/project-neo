@@ -1,6 +1,6 @@
 /// Project Neo - Community Home Screen
 ///
-/// Immersive community interior screen with Amino-style aesthetics.
+/// Independent mini-app with own navigation system.
 library;
 
 import 'package:flutter/material.dart';
@@ -9,33 +9,52 @@ import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../../community/domain/entities/community_entity.dart';
 import '../../../home/presentation/providers/home_providers.dart';
+import '../widgets/facepile_widget.dart';
+import '../widgets/live_indicator_widget.dart';
 
 class CommunityHomeScreen extends ConsumerStatefulWidget {
   final CommunityEntity community;
+  final bool isGuest;
+  final bool isLive;
 
   const CommunityHomeScreen({
     super.key,
     required this.community,
+    this.isGuest = false,
+    this.isLive = false,
   });
 
   @override
-  ConsumerState<CommunityHomeScreen> createState() => _CommunityHomeScreenState();
+  ConsumerState<CommunityHomeScreen> createState() =>
+      _CommunityHomeScreenState();
 }
 
 class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  bool isMember = false; // Membership state - false = visitor, true = member
+  bool isMember = false;
+  int _currentNavIndex = 0; // Internal navigation index
+  bool _isSearching = false; // Search mode toggle
+  final _searchController = TextEditingController();
+
+  // Dummy online users for facepile
+  final List<String> _onlineUsers = [
+    '', // Empty strings will show placeholder avatars
+    '',
+    '',
+  ];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    isMember = !widget.isGuest;
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -43,24 +62,56 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: NestedScrollView(
-        headerSliverBuilder: (context, innerBoxIsScrolled) {
-          return [
-            _buildSliverAppBar(),
-            _buildSliverTabBar(),
-          ];
-        },
-        body: _buildTabBarView(),
-      ),
-      // Conditional bottom bar based on membership
-      floatingActionButton: isMember ? _buildCentralFAB() : null,
+      body: _buildBody(),
+      floatingActionButton: isMember && _currentNavIndex == 0
+          ? _buildCentralFAB()
+          : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: isMember ? _buildBottomAppBar() : _buildJoinBar(),
+      bottomNavigationBar: isMember
+          ? _buildInternalBottomNav()
+          : _buildJoinBar(),
     );
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // HEADER - SLIVER APP BAR (AMINO STYLE)
+  // BODY - SWITCHES BASED ON INTERNAL NAV INDEX
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildBody() {
+    switch (_currentNavIndex) {
+      case 0:
+        return _buildInicioView(); // Feed
+      case 1:
+        return _buildMiembrosView(); // Members
+      case 2:
+        return _buildInicioView(); // Center button - same as feed
+      case 3:
+        return _buildChatsView(); // Chats
+      case 4:
+        return _buildPerfilView(); // Profile
+      default:
+        return _buildInicioView();
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // INICIO VIEW (FEED) - INDEX 0
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildInicioView() {
+    return NestedScrollView(
+      headerSliverBuilder: (context, innerBoxIsScrolled) {
+        return [
+          _buildSliverAppBar(),
+          _buildSliverTabBar(),
+        ];
+      },
+      body: _buildTabBarView(),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // HEADER - ADVANCED SLIVER APP BAR
   // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildSliverAppBar() {
@@ -68,7 +119,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
     final iconUrl = widget.community.iconUrl;
 
     return SliverAppBar(
-      expandedHeight: 220,
+      expandedHeight: widget.isLive ? 250 : 220,
       floating: false,
       pinned: true,
       backgroundColor: Colors.black,
@@ -77,10 +128,19 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
         onPressed: () => Navigator.of(context).pop(),
       ),
       actions: [
+        // Search icon - toggles search mode
         IconButton(
-          icon: const Icon(Icons.search, color: Colors.white),
+          icon: Icon(
+            _isSearching ? Icons.close : Icons.search,
+            color: Colors.white,
+          ),
           onPressed: () {
-            // TODO: Implement search
+            setState(() {
+              _isSearching = !_isSearching;
+              if (!_isSearching) {
+                _searchController.clear();
+              }
+            });
           },
         ),
         IconButton(
@@ -90,6 +150,11 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
           },
         ),
       ],
+      // Animated title - switches between title and search field
+      title: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 300),
+        child: _isSearching ? _buildSearchField() : null,
+      ),
       flexibleSpace: FlexibleSpaceBar(
         background: Stack(
           fit: StackFit.expand,
@@ -103,13 +168,14 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                     ? Image.network(
                         coverUrl,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _buildPlaceholderBackground(),
+                        errorBuilder: (_, __, ___) =>
+                            _buildPlaceholderBackground(),
                       )
                     : _buildPlaceholderBackground(),
               ),
             ),
 
-            // Strong dark gradient for contrast
+            // Dark gradient overlay
             Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -125,15 +191,15 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
               ),
             ),
 
-            // Bottom overlay with icon and info (Amino style)
+            // Bottom overlay with icon and info
             Positioned(
               left: 16,
               right: 16,
-              bottom: 16,
+              bottom: widget.isLive ? 40 : 16,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  // Community Icon (overlapping)
+                  // Community Icon
                   Container(
                     width: 70,
                     height: 70,
@@ -185,7 +251,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                         ),
                         const SizedBox(height: 6),
 
-                        // Member Stats
+                        // Member Stats with Facepile
                         Row(
                           children: [
                             const Icon(
@@ -220,6 +286,13 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
+                            const SizedBox(width: 8),
+                            // Facepile
+                            FacepileWidget(
+                              avatarUrls: _onlineUsers,
+                              maxVisible: 3,
+                              size: 24,
+                            ),
                           ],
                         ),
                       ],
@@ -228,8 +301,67 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                 ],
               ),
             ),
+
+            // Live Indicator (if active)
+            if (widget.isLive)
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 8,
+                child: LiveIndicatorWidget(
+                  liveTitle: 'Cine en vivo en Sala 1',
+                  onTap: () {
+                    // TODO: Join live session
+                  },
+                ),
+              ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSearchField() {
+    return Container(
+      key: const ValueKey('search_field'),
+      height: 40,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: TextField(
+        controller: _searchController,
+        autofocus: true,
+        style: const TextStyle(color: Colors.white, fontSize: 14),
+        decoration: InputDecoration(
+          hintText: 'Buscar blogs, usuarios, chats...',
+          hintStyle: TextStyle(
+            color: Colors.white.withValues(alpha: 0.6),
+            fontSize: 14,
+          ),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 10,
+          ),
+          suffixIcon: _searchController.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear, color: Colors.white, size: 18),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() {});
+                  },
+                )
+              : null,
+        ),
+        onChanged: (value) {
+          setState(() {});
+          // TODO: Implement search logic
+        },
       ),
     );
   }
@@ -277,7 +409,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // TAB BAR
+  // TAB BAR (FOR INICIO VIEW)
   // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildSliverTabBar() {
@@ -296,43 +428,32 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
           unselectedLabelStyle: NeoTextStyles.labelLarge,
           tabs: const [
             Tab(text: 'Destacados'),
-            Tab(text: 'Chats'),
-            Tab(text: 'Miembros'),
+            Tab(text: 'Blogs'),
+            Tab(text: 'Wikis'),
           ],
         ),
       ),
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // TAB BAR VIEW
-  // ═══════════════════════════════════════════════════════════════════════════
-
   Widget _buildTabBarView() {
     return TabBarView(
       controller: _tabController,
       children: [
         _buildDestacadosTab(),
-        _buildChatsTab(),
-        _buildMiembrosTab(),
+        _buildBlogsTab(),
+        _buildWikisTab(),
       ],
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // DESTACADOS TAB - STAGGERED GRID (AMINO/PINTEREST STYLE)
-  // ═══════════════════════════════════════════════════════════════════════════
-
+  // Tab content (simplified versions)
   Widget _buildDestacadosTab() {
-    // Dummy blog posts with varied heights
-    final blogs = List.generate(
-      12,
-      (index) => {
-        'title': _getBlogTitle(index),
-        'height': _getBlogHeight(index),
-        'gradient': _getBlogGradient(index),
-      },
-    );
+    final blogs = List.generate(12, (index) => {
+      'title': _getBlogTitle(index),
+      'height': _getBlogHeight(index),
+      'gradient': _getBlogGradient(index),
+    });
 
     return CustomScrollView(
       slivers: [
@@ -353,11 +474,26 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
             },
           ),
         ),
-        // Add bottom padding for FAB
-        const SliverToBoxAdapter(
-          child: SizedBox(height: 80),
-        ),
+        const SliverToBoxAdapter(child: SizedBox(height: 80)),
       ],
+    );
+  }
+
+  Widget _buildBlogsTab() {
+    return const Center(
+      child: Text(
+        'Blogs Tab',
+        style: TextStyle(color: Colors.white, fontSize: 18),
+      ),
+    );
+  }
+
+  Widget _buildWikisTab() {
+    return const Center(
+      child: Text(
+        'Wikis Tab',
+        style: TextStyle(color: Colors.white, fontSize: 18),
+      ),
     );
   }
 
@@ -382,7 +518,6 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image/Cover area
             Container(
               height: height,
               decoration: BoxDecoration(
@@ -392,28 +527,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                   colors: gradient,
                 ),
               ),
-              child: Stack(
-                children: [
-                  // Subtle pattern overlay
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withValues(alpha: 0.3),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             ),
-
-            // Title area
             Container(
               padding: const EdgeInsets.all(12),
               color: NeoColors.card,
@@ -436,125 +550,30 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // CHATS TAB
+  // MIEMBROS VIEW - INDEX 1
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Widget _buildChatsTab() {
-    // Dummy public chats
-    final chats = List.generate(
-      8,
-      (index) => {
-        'name': 'Chat Público ${index + 1}',
-        'lastMessage': 'Último mensaje del chat...',
-        'time': '${index + 1}h',
-      },
-    );
-
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-      itemCount: chats.length,
-      itemBuilder: (context, index) {
-        final chat = chats[index];
-        return Container(
-          margin: const EdgeInsets.only(bottom: NeoSpacing.sm),
-          padding: const EdgeInsets.all(NeoSpacing.md),
-          decoration: BoxDecoration(
-            color: NeoColors.card,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: NeoColors.border,
-              width: NeoSpacing.borderWidth,
+  Widget _buildMiembrosView() {
+    return CustomScrollView(
+      slivers: [
+        SliverAppBar(
+          pinned: true,
+          backgroundColor: const Color(0xFF1A1A1A),
+          title: const Text('Miembros'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => setState(() => _currentNavIndex = 0),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _buildMemberItem('Usuario ${index + 1}', isLeader: index < 2),
+              childCount: 10,
             ),
           ),
-          child: Row(
-            children: [
-              // Avatar
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: NeoColors.accent.withValues(alpha: 0.2),
-                ),
-                child: const Icon(
-                  Icons.chat_bubble_rounded,
-                  color: NeoColors.accent,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: NeoSpacing.md),
-              // Content
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      chat['name'] as String,
-                      style: NeoTextStyles.bodyLarge.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      chat['lastMessage'] as String,
-                      style: NeoTextStyles.bodySmall.copyWith(
-                        color: NeoColors.textSecondary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              // Time
-              Text(
-                chat['time'] as String,
-                style: NeoTextStyles.labelSmall.copyWith(
-                  color: NeoColors.textTertiary,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // MIEMBROS TAB
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  Widget _buildMiembrosTab() {
-    // Dummy members (leaders and curators)
-    final leaders = List.generate(2, (index) => 'Líder ${index + 1}');
-    final curators = List.generate(5, (index) => 'Curador ${index + 1}');
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-      children: [
-        // Leaders Section
-        Text(
-          'Líderes',
-          style: NeoTextStyles.headlineSmall.copyWith(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
         ),
-        const SizedBox(height: NeoSpacing.sm),
-        ...leaders.map((name) => _buildMemberItem(name, isLeader: true)),
-        const SizedBox(height: NeoSpacing.lg),
-
-        // Curators Section
-        Text(
-          'Curadores',
-          style: NeoTextStyles.headlineSmall.copyWith(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: NeoSpacing.sm),
-        ...curators.map((name) => _buildMemberItem(name, isLeader: false)),
       ],
     );
   }
@@ -566,14 +585,10 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
       decoration: BoxDecoration(
         color: NeoColors.card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: NeoColors.border,
-          width: NeoSpacing.borderWidth,
-        ),
+        border: Border.all(color: NeoColors.border, width: 1),
       ),
       child: Row(
         children: [
-          // Avatar
           Container(
             width: 48,
             height: 48,
@@ -593,7 +608,6 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
             ),
           ),
           const SizedBox(width: NeoSpacing.md),
-          // Name
           Expanded(
             child: Text(
               name,
@@ -603,13 +617,9 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
               ),
             ),
           ),
-          // Badge
           if (isLeader)
             Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 4,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: Colors.amber.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
@@ -628,7 +638,232 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // CENTRAL DOCKED FAB (AMINO STYLE)
+  // CHATS VIEW - INDEX 3
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildChatsView() {
+    return CustomScrollView(
+      slivers: [
+        SliverAppBar(
+          pinned: true,
+          backgroundColor: const Color(0xFF1A1A1A),
+          title: const Text('Chats'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => setState(() => _currentNavIndex = 0),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _buildChatItem('Chat Público ${index + 1}'),
+              childCount: 8,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChatItem(String name) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: NeoSpacing.sm),
+      padding: const EdgeInsets.all(NeoSpacing.md),
+      decoration: BoxDecoration(
+        color: NeoColors.card,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: NeoColors.border, width: 1),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: NeoColors.accent.withValues(alpha: 0.2),
+            ),
+            child: const Icon(
+              Icons.chat_bubble_rounded,
+              color: NeoColors.accent,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: NeoSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: NeoTextStyles.bodyLarge.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Último mensaje del chat...',
+                  style: NeoTextStyles.bodySmall.copyWith(
+                    color: NeoColors.textSecondary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PERFIL VIEW - INDEX 4
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildPerfilView() {
+    return CustomScrollView(
+      slivers: [
+        SliverAppBar(
+          pinned: true,
+          backgroundColor: const Color(0xFF1A1A1A),
+          title: const Text('Mi Perfil'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => setState(() => _currentNavIndex = 0),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverToBoxAdapter(
+            child: Column(
+              children: [
+                // Avatar
+                Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: NeoColors.accent.withValues(alpha: 0.2),
+                    border: Border.all(color: NeoColors.accent, width: 3),
+                  ),
+                  child: const Icon(
+                    Icons.person,
+                    size: 50,
+                    color: NeoColors.accent,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Usuario Demo',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Miembro desde hace 3 meses',
+                  style: NeoTextStyles.bodyMedium.copyWith(
+                    color: NeoColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // Stats
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildStatItem('Posts', '42'),
+                    _buildStatItem('Likes', '1.2K'),
+                    _buildStatItem('Comments', '328'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatItem(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: NeoTextStyles.labelMedium.copyWith(
+            color: NeoColors.textSecondary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // INTERNAL BOTTOM NAVIGATION (5 ITEMS)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildInternalBottomNav() {
+    return BottomAppBar(
+      color: const Color(0xFF1A1A1A),
+      shape: const CircularNotchedRectangle(),
+      notchMargin: 8,
+      child: SizedBox(
+        height: 60,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildNavItem(Icons.home, 'Inicio', 0),
+            _buildNavItem(Icons.people, 'Miembros', 1),
+            const SizedBox(width: 48), // Space for FAB
+            _buildNavItem(Icons.chat_bubble, 'Chats', 3),
+            _buildNavItem(Icons.person, 'Perfil', 4),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(IconData icon, String label, int index) {
+    final isSelected = _currentNavIndex == index;
+    return InkWell(
+      onTap: () => setState(() => _currentNavIndex = index),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            color: isSelected ? NeoColors.accent : NeoColors.textSecondary,
+            size: 24,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: isSelected ? NeoColors.accent : NeoColors.textSecondary,
+              fontSize: 11,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CENTRAL FAB
   // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildCentralFAB() {
@@ -638,10 +873,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: const LinearGradient(
-          colors: [
-            Color(0xFF8B5CF6), // Violet
-            Color(0xFFEC4899), // Pink
-          ],
+          colors: [Color(0xFF8B5CF6), Color(0xFFEC4899)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -658,48 +890,66 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
         child: InkWell(
           onTap: _showCreationOptions,
           customBorder: const CircleBorder(),
-          child: const Icon(
-            Icons.add,
-            color: Colors.white,
-            size: 32,
-          ),
+          child: const Icon(Icons.add, color: Colors.white, size: 32),
         ),
       ),
     );
   }
 
-  Widget _buildBottomAppBar() {
-    return BottomAppBar(
-      color: const Color(0xFF1A1A1A),
-      shape: const CircularNotchedRectangle(),
-      notchMargin: 8,
-      child: SizedBox(
-        height: 60,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
+  void _showCreationOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: NeoColors.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Left side placeholder
-            const SizedBox(width: 48),
-            const SizedBox(width: 48),
-            // Center space for FAB
-            const SizedBox(width: 80),
-            // Right side placeholder
-            const SizedBox(width: 48),
-            const SizedBox(width: 48),
+            Text(
+              'Crear Contenido',
+              style: NeoTextStyles.headlineSmall.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 24),
+            _buildCreationOption(Icons.article, 'Nuevo Blog', () {}),
+            _buildCreationOption(Icons.poll, 'Nueva Encuesta', () {}),
+            _buildCreationOption(Icons.quiz, 'Nuevo Quiz', () {}),
+            const SizedBox(height: 16),
           ],
         ),
       ),
     );
   }
 
+  Widget _buildCreationOption(IconData icon, String label, VoidCallback onTap) {
+    return ListTile(
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: NeoColors.accent.withValues(alpha: 0.2),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icon, color: NeoColors.accent),
+      ),
+      title: Text(
+        label,
+        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+      ),
+      onTap: onTap,
+    );
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
-  // JOIN BAR (FOR NON-MEMBERS)
+  // JOIN BAR (FOR GUESTS)
   // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildJoinBar() {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
+    return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF1A1A1A),
         border: Border(
@@ -711,10 +961,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: 12,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           child: SizedBox(
             height: 56,
             child: ElevatedButton(
@@ -729,17 +976,14 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                   borderRadius: BorderRadius.circular(16),
                 ),
               ),
-              child: Row(
+              child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
-                    Icons.add_circle_outline,
-                    size: 24,
-                  ),
-                  const SizedBox(width: 12),
+                  Icon(Icons.add_circle_outline, size: 24),
+                  SizedBox(width: 12),
                   Text(
                     'Unirse a la Comunidad',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 0.5,
@@ -755,176 +999,20 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   }
 
   void _joinCommunity() {
-    // Add community to global state
     ref.read(myCommunitiesProvider.notifier).joinCommunity(widget.community);
-    
-    setState(() {
-      isMember = true;
-    });
-
-    // Show welcome message
+    setState(() => isMember = true);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Row(
+        content: const Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.check_circle,
-                color: Colors.white,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text(
-                '¡Bienvenido a la comunidad!',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
+            Icon(Icons.check_circle, color: Colors.white),
+            SizedBox(width: 12),
+            Text('¡Bienvenido a la comunidad!'),
           ],
         ),
-        backgroundColor: const Color(0xFF10B981), // Green
+        backgroundColor: const Color(0xFF10B981),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 3),
-      ),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // CREATION OPTIONS MODAL
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  void _showCreationOptions() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF1F1F1F),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Handle bar
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Title
-            const Text(
-              'Crear Contenido',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Options Grid
-            GridView.count(
-              shrinkWrap: true,
-              crossAxisCount: 3,
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 16,
-              physics: const NeverScrollableScrollPhysics(),
-              children: [
-                _buildCreationOption(
-                  icon: Icons.article_rounded,
-                  label: 'Blog',
-                  color: const Color(0xFF3B82F6), // Blue
-                ),
-                _buildCreationOption(
-                  icon: Icons.poll_rounded,
-                  label: 'Encuesta',
-                  color: const Color(0xFF10B981), // Green
-                ),
-                _buildCreationOption(
-                  icon: Icons.quiz_rounded,
-                  label: 'Quiz',
-                  color: const Color(0xFFF59E0B), // Amber
-                ),
-                _buildCreationOption(
-                  icon: Icons.chat_rounded,
-                  label: 'Chat Público',
-                  color: const Color(0xFF8B5CF6), // Purple
-                ),
-                _buildCreationOption(
-                  icon: Icons.link_rounded,
-                  label: 'Link',
-                  color: const Color(0xFFEC4899), // Pink
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCreationOption({
-    required IconData icon,
-    required String label,
-    required Color color,
-  }) {
-    return InkWell(
-      onTap: () {
-        Navigator.pop(context);
-        // TODO: Implement creation action
-      },
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: color.withValues(alpha: 0.3),
-            width: 1,
-          ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              color: color,
-              size: 32,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -933,56 +1021,52 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   // HELPERS
   // ═══════════════════════════════════════════════════════════════════════════
 
+  String _formatMemberCount(int count) {
+    if (count >= 1000000) return '${(count / 1000000).toStringAsFixed(1)}M';
+    if (count >= 1000) return '${(count / 1000).toStringAsFixed(1)}K';
+    return count.toString();
+  }
+
   Color _parseColor(String hexColor) {
     try {
       final hex = hexColor.replaceAll('#', '');
       return Color(int.parse('FF$hex', radix: 16));
     } catch (e) {
-      return NeoColors.accent;
+      return const Color(0xFF8B5CF6);
     }
-  }
-
-  String _formatMemberCount(int count) {
-    if (count >= 1000000) {
-      return '${(count / 1000000).toStringAsFixed(1)}M';
-    } else if (count >= 1000) {
-      return '${(count / 1000).toStringAsFixed(1)}k';
-    }
-    return count.toString();
   }
 
   String _getBlogTitle(int index) {
     final titles = [
-      'Bienvenidos a la comunidad',
-      'Tutorial: Cómo empezar',
-      'Reglas de la comunidad',
-      'Evento especial este fin de semana',
-      'Conoce a los moderadores',
-      'Galería de arte de la comunidad',
-      'Discusión: ¿Cuál es tu favorito?',
-      'Anuncio importante',
-      'Concurso de creatividad',
-      'Historia de nuestra comunidad',
-      'Tips y trucos para nuevos miembros',
-      'Destacado del mes',
+      'Guía definitiva de RPG',
+      'Top 10 Anime 2024',
+      'Cómo mejorar en PvP',
+      'Review: Nuevo juego',
+      'Teoría del lore',
+      'Fan art showcase',
+      'Builds recomendados',
+      'Easter eggs ocultos',
+      'Speedrun tutorial',
+      'Comunidad highlights',
+      'Eventos próximos',
+      'Discusión semanal',
     ];
     return titles[index % titles.length];
   }
 
   double _getBlogHeight(int index) {
-    // Varied heights for staggered effect
-    final heights = [180.0, 220.0, 160.0, 200.0, 240.0, 190.0];
+    final heights = [150.0, 180.0, 200.0, 160.0, 190.0, 170.0];
     return heights[index % heights.length];
   }
 
   List<Color> _getBlogGradient(int index) {
     final gradients = [
-      [const Color(0xFF6366F1), const Color(0xFF8B5CF6)],
-      [const Color(0xFF8B5CF6), const Color(0xFFEC4899)],
-      [const Color(0xFF3B82F6), const Color(0xFF06B6D4)],
+      [const Color(0xFFEF4444), const Color(0xFFC026D3)],
+      [const Color(0xFF3B82F6), const Color(0xFF8B5CF6)],
       [const Color(0xFF10B981), const Color(0xFF059669)],
       [const Color(0xFFF59E0B), const Color(0xFFEF4444)],
-      [const Color(0xFFEC4899), const Color(0xFFF43F5E)],
+      [const Color(0xFF8B5CF6), const Color(0xFFEC4899)],
+      [const Color(0xFF06B6D4), const Color(0xFF3B82F6)],
     ];
     return gradients[index % gradients.length];
   }
@@ -1005,10 +1089,7 @@ class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) {
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
     return Container(
       color: Colors.black,
       child: tabBar,
@@ -1016,7 +1097,5 @@ class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
   }
 
   @override
-  bool shouldRebuild(_SliverTabBarDelegate oldDelegate) {
-    return false;
-  }
+  bool shouldRebuild(_SliverTabBarDelegate oldDelegate) => false;
 }

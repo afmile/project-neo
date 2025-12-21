@@ -30,6 +30,7 @@ import '../../features/home/presentation/providers/home_providers.dart';
 import '../../features/community/domain/entities/community_entity.dart';
 import '../../features/community/presentation/screens/community_screen.dart';
 import '../../features/community/presentation/screens/community_home_screen.dart';
+import '../../features/community/presentation/screens/community_preview_screen.dart';
 import '../../features/notifications/presentation/screens/notifications_screen.dart';
 import '../../features/discovery/presentation/screens/discovery_screen.dart';
 import '../../features/blog/presentation/screens/blog_detail_screen.dart';
@@ -145,14 +146,42 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Community home route - Level 1: Hierarchical Navigation
       // Uses native platform animations (Zoom on Android, Slide on iOS)
       // Hero animations work independently of page transitions
+      // Uses root navigator to hide global bottom navigation
       GoRoute(
         path: '/community_home',
         name: 'community_home',
+        parentNavigatorKey: rootNavigatorKey, // Hide global nav
         builder: (context, state) {
-          final community = state.extra as CommunityEntity;
-          return CommunityHomeScreen(community: community);
+          final extra = state.extra;
+          
+          // Handle both old format (CommunityEntity) and new format (Map with isGuest/isLive)
+          if (extra is Map<String, dynamic>) {
+            final community = extra['community'] as CommunityEntity;
+            final isGuest = extra['isGuest'] as bool? ?? false;
+            final isLive = extra['isLive'] as bool? ?? false;
+            return CommunityHomeScreen(
+              community: community,
+              isGuest: isGuest,
+              isLive: isLive,
+            );
+          } else {
+            final community = extra as CommunityEntity;
+            return CommunityHomeScreen(community: community);
+          }
         },
       ),
+
+      // Community preview route - "El Portal"
+      // Shown before joining a community
+      GoRoute(
+        path: '/community_preview',
+        name: 'community_preview',
+        builder: (context, state) {
+          final community = state.extra as CommunityEntity;
+          return CommunityPreviewScreen(community: community);
+        },
+      ),
+
 
       // Notifications
       GoRoute(

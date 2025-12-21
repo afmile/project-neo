@@ -187,7 +187,7 @@ class NeoFeedCard extends ConsumerWidget {
       // User is a member → Navigate to blog detail
       context.push('/blog_detail', extra: post);
     } else {
-      // User is NOT a member → Navigate to community home to join first
+      // User is NOT a member → Navigate to community preview first
       // Find the community entity from all communities
       final allCommunities = ref.read(allCommunitiesProvider);
       final community = allCommunities.firstWhere(
@@ -208,7 +208,7 @@ class NeoFeedCard extends ConsumerWidget {
         },
       );
       
-      context.push('/community_home', extra: community);
+      context.push('/community_preview', extra: community);
     }
   }
 
