@@ -12,11 +12,13 @@ import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/auth/presentation/screens/verify_email_screen.dart';
 import '../../features/auth/presentation/screens/splash_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
+import '../../features/home/presentation/providers/home_providers.dart';
 import '../../features/community/domain/entities/community_entity.dart';
 import '../../features/community/presentation/screens/community_screen.dart';
 import '../../features/community/presentation/screens/community_home_screen.dart';
 import '../../features/notifications/presentation/screens/notifications_screen.dart';
 import '../../features/discovery/presentation/screens/discovery_screen.dart';
+import '../../features/blog/presentation/screens/blog_detail_screen.dart';
 
 /// Global navigator key
 final rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -148,6 +150,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/discovery',
         name: 'discovery',
         builder: (context, state) => const DiscoveryScreen(),
+      ),
+
+      // Blog Detail
+      GoRoute(
+        path: '/blog_detail',
+        name: 'blog_detail',
+        builder: (context, state) {
+          final post = state.extra as FeedPost;
+          return BlogDetailScreen(post: post);
+        },
       ),
     ],
     

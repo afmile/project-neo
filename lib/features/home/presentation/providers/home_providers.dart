@@ -17,8 +17,35 @@ final neoCoinBalanceProvider = Provider<int>((ref) => 1250);
 // COMMUNITIES
 // ═══════════════════════════════════════════════════════════════════════════
 
-/// Provider for user's communities (empty by default for empty state demo)
-final myCommunitiesProvider = Provider<List<CommunityEntity>>((ref) => []);
+/// StateNotifier for managing user's joined communities
+class MyCommunitiesNotifier extends StateNotifier<List<CommunityEntity>> {
+  MyCommunitiesNotifier() : super([]);
+
+  /// Add a community to user's list
+  void joinCommunity(CommunityEntity community) {
+    // Check if already joined
+    if (state.any((c) => c.id == community.id)) {
+      return;
+    }
+    state = [...state, community];
+  }
+
+  /// Remove a community from user's list
+  void leaveCommunity(String communityId) {
+    state = state.where((c) => c.id != communityId).toList();
+  }
+
+  /// Clear all communities (for logout, etc)
+  void clearAll() {
+    state = [];
+  }
+}
+
+/// Provider for user's communities (managed with StateNotifier)
+final myCommunitiesProvider =
+    StateNotifierProvider<MyCommunitiesNotifier, List<CommunityEntity>>((ref) {
+  return MyCommunitiesNotifier();
+});
 
 /// Provider for recommended communities (mock data, filtered by category)
 final recommendedCommunitiesProvider = Provider<List<CommunityEntity>>((ref) {
@@ -284,4 +311,151 @@ final discoveryFilteredCommunitiesProvider = Provider<List<CommunityEntity>>((re
     
     return true;
   }).toList();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GLOBAL FEED
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Feed post model for global feed
+class FeedPost {
+  final String id;
+  final String communityId; // NEW: Community ID for membership check
+  final String communityName;
+  final String communityAvatar;
+  final String timeAgo;
+  final String? coverImageUrl;
+  final String title;
+  final String summary;
+  final int likes;
+  final int comments;
+
+  const FeedPost({
+    required this.id,
+    required this.communityId,
+    required this.communityName,
+    required this.communityAvatar,
+    required this.timeAgo,
+    this.coverImageUrl,
+    required this.title,
+    required this.summary,
+    this.likes = 0,
+    this.comments = 0,
+  });
+}
+
+/// Provider for global feed posts
+final globalFeedProvider = Provider<List<FeedPost>>((ref) {
+  return [
+    FeedPost(
+      id: 'f1',
+      communityId: '1', // Anime & Manga
+      communityName: 'Anime & Manga',
+      communityAvatar: '🎌',
+      timeAgo: 'Hace 2h',
+      title: 'Teoría: El verdadero poder de Luffy',
+      summary: 'Después del último capítulo, creo que finalmente entendí el verdadero significado del Gear 5. Déjenme explicarles...',
+      likes: 234,
+      comments: 45,
+    ),
+    FeedPost(
+      id: 'f2',
+      communityId: '2', // Tech & Coding
+      communityName: 'Tech & Coding',
+      communityAvatar: '💻',
+      timeAgo: 'Hace 4h',
+      title: 'Mi setup de desarrollo 2025',
+      summary: 'Les comparto mi estación de trabajo después de 3 años de mejoras. Monitor ultrawide, teclado mecánico custom...',
+      likes: 567,
+      comments: 89,
+    ),
+    FeedPost(
+      id: 'f3',
+      communityId: '3', // Gaming Zone
+      communityName: 'Gaming Zone',
+      communityAvatar: '🎮',
+      timeAgo: 'Hace 5h',
+      title: 'Guía completa: Elden Ring DLC',
+      summary: 'Todo lo que necesitas saber antes de empezar Shadow of the Erdtree. Builds recomendadas, secretos y más...',
+      likes: 892,
+      comments: 156,
+    ),
+    FeedPost(
+      id: 'f4',
+      communityId: '4', // K-Pop Universe (from recommendedCommunitiesProvider, ID not in allCommunitiesProvider)
+      communityName: 'K-Pop Universe',
+      communityAvatar: '🎤',
+      timeAgo: 'Hace 7h',
+      title: 'Comeback de BLACKPINK confirmado',
+      summary: 'YG Entertainment acaba de confirmar el regreso de BLACKPINK para este verano. Aquí todos los detalles...',
+      likes: 1234,
+      comments: 234,
+    ),
+    FeedPost(
+      id: 'f5',
+      communityId: '5', // Arte Digital (from recommendedCommunitiesProvider, ID not in allCommunitiesProvider)
+      communityName: 'Arte Digital',
+      communityAvatar: '🎨',
+      timeAgo: 'Hace 9h',
+      title: 'Tutorial: Iluminación cinematográfica',
+      summary: 'Aprende a crear iluminación dramática en tus ilustraciones digitales con estos simples pasos...',
+      likes: 445,
+      comments: 67,
+    ),
+    FeedPost(
+      id: 'f6',
+      communityId: '13', // Fitness & Gym
+      communityName: 'Fitness & Gym',
+      communityAvatar: '💪',
+      timeAgo: 'Hace 12h',
+      title: 'Mi transformación de 6 meses',
+      summary: 'De 85kg a 75kg manteniendo músculo. Rutina, dieta y todo lo que aprendí en el proceso...',
+      likes: 678,
+      comments: 123,
+    ),
+    FeedPost(
+      id: 'f7',
+      communityId: '14', // Historias de Terror
+      communityName: 'Historias de Terror',
+      communityAvatar: '👻',
+      timeAgo: 'Hace 14h',
+      title: 'Lo que vi en el bosque esa noche',
+      summary: 'Nunca debí haber ido de campamento solo. Lo que encontré en ese claro del bosque me persigue hasta hoy...',
+      likes: 789,
+      comments: 198,
+    ),
+    FeedPost(
+      id: 'f8',
+      communityId: '10', // Música Latina
+      communityName: 'Música Latina',
+      communityAvatar: '🎵',
+      timeAgo: 'Hace 16h',
+      title: 'Top 10 canciones de reggaeton 2025',
+      summary: 'Las canciones que están dominando las pistas de baile este año. ¿Cuál es tu favorita?',
+      likes: 456,
+      comments: 78,
+    ),
+    FeedPost(
+      id: 'f9',
+      communityId: '12', // Fotografía
+      communityName: 'Fotografía',
+      communityAvatar: '📷',
+      timeAgo: 'Hace 18h',
+      title: 'Capturando la hora dorada',
+      summary: 'Consejos para aprovechar al máximo esos 30 minutos mágicos antes del atardecer...',
+      likes: 334,
+      comments: 45,
+    ),
+    FeedPost(
+      id: 'f10',
+      communityId: '11', // Crypto & Web3
+      communityName: 'Crypto & Web3',
+      communityAvatar: '₿',
+      timeAgo: 'Hace 20h',
+      title: 'Bitcoin alcanza nuevo máximo histórico',
+      summary: 'Análisis del mercado y qué esperar en las próximas semanas. ¿Es momento de comprar o vender?',
+      likes: 567,
+      comments: 234,
+    ),
+  ];
 });

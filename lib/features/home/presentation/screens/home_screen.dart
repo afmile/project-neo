@@ -1,8 +1,3 @@
-/// Project Neo - Home Screen
-///
-/// Amino-style home screen with custom AppBar, search, and community sections.
-library;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,7 +6,10 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/home_providers.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../features/chat/presentation/screens/chats_screen.dart';
+import '../../../../features/discovery/presentation/screens/discovery_screen.dart';
+import '../../../../features/profile/presentation/screens/profile_screen.dart';
 import '../widgets/community_card.dart';
+import '../widgets/neo_feed_card.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -52,48 +50,48 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         bottom: false,
         child: Column(
           children: [
-            // Shared Header
-            _buildHeader().animate().fadeIn(duration: 400.ms),
+            // Shared Header (hide on Profile tab)
+            if (_currentNavIndex != 3)
+              _buildHeader().animate().fadeIn(duration: 400.ms),
             
             // Body Content
             Expanded(
-              child: _currentNavIndex == 2 
-                  ? const ChatsScreen().animate().fadeIn(duration: 300.ms)
-                  : _buildHomeBody(), 
+              child: IndexedStack(
+                index: _currentNavIndex,
+                children: [
+                  _buildHomeBody(),           // 0: Home
+                  const DiscoveryScreen(),    // 1: Discovery
+                  const ChatsScreen(),        // 2: Chats
+                  const ProfileScreen(),      // 3: Profile
+                ],
+              ),
             ),
           ],
         ),
       ),
-      bottomNavigationBar: _buildBottomNav(),
+      // Central docked FAB setup
+      floatingActionButton: _buildCentralFAB(),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      bottomNavigationBar: _buildBottomAppBar(),
     );
   }
 
   Widget _buildHomeBody() {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.only(bottom: 100), // Space for bottom nav
+      padding: const EdgeInsets.only(
+        top: NeoSpacing.lg, // Add breathing room from header
+        bottom: 100, // Space for bottom nav
+      ),
       child: Column(
         children: [
-           // Search Bar
-           _buildSearchBar().animate().fadeIn(duration: 400.ms, delay: 100.ms),
-           
-           // Categories (Always visible)
-           _buildCategoryChips().animate().fadeIn(duration: 400.ms, delay: 150.ms),
-           
-           const SizedBox(height: NeoSpacing.md),
-
            // My Communities
-           _buildMyCommunities().animate().fadeIn(duration: 400.ms, delay: 200.ms),
+           _buildMyCommunities().animate().fadeIn(duration: 400.ms, delay: 100.ms),
            
            const SizedBox(height: NeoSpacing.lg),
            
-           // Recommended
-           _buildRecommendedSection().animate().fadeIn(duration: 400.ms, delay: 300.ms),
-           
-           const SizedBox(height: NeoSpacing.lg),
-           
-           // Recent
-           _buildRecentSection().animate().fadeIn(duration: 400.ms, delay: 400.ms),
+           // Global Feed
+           _buildGlobalFeed().animate().fadeIn(duration: 400.ms, delay: 200.ms),
         ],
       ),
     );
@@ -596,6 +594,52 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // GLOBAL FEED
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildGlobalFeed() {
+    final feedPosts = ref.watch(globalFeedProvider);
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: NeoSpacing.md),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.auto_awesome_rounded,
+                size: 20,
+                color: NeoColors.accent,
+              ),
+              const SizedBox(width: NeoSpacing.sm),
+              Text(
+                'Para Ti',
+                style: NeoTextStyles.headlineMedium,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: NeoSpacing.md),
+        
+        // Feed posts
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: NeoSpacing.md),
+          child: ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: feedPosts.length,
+            itemBuilder: (context, index) {
+              final post = feedPosts[index];
+              return NeoFeedCard(post: post);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildRecentSection() {
     final communities = ref.watch(recentCommunitiesProvider);
     
@@ -640,121 +684,240 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // BOTTOM NAVIGATION
+  // CENTRAL DOCKED FAB (AMINO STYLE)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Widget _buildBottomNav() {
+  Widget _buildCentralFAB() {
     return Container(
+      width: 64,
+      height: 64,
       decoration: BoxDecoration(
-        color: Colors.grey[900],
-        border: const Border(
-          top: BorderSide(
-            color: NeoColors.border,
-            width: NeoSpacing.borderWidth,
-          ),
+        shape: BoxShape.circle,
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFF8B5CF6), // Violet
+            Color(0xFFEC4899), // Pink
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: NeoSpacing.xl,
-            vertical: NeoSpacing.sm,
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF8B5CF6).withValues(alpha: 0.5),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildNavItem(
-                icon: Icons.home_rounded,
-                label: 'Home',
-                index: 0,
-              ),
-              _buildNavItem(
-                icon: Icons.add_rounded,
-                label: 'Crear',
-                index: 1,
-                isCenter: true,
-              ),
-              _buildNavItem(
-                icon: Icons.chat_bubble_rounded,
-                label: 'Chats',
-                index: 2,
-              ),
-            ],
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _showCreationOptions,
+          customBorder: const CircleBorder(),
+          child: const Icon(
+            Icons.add,
+            color: Colors.white,
+            size: 32,
           ),
         ),
       ),
     );
   }
 
-  Widget _buildNavItem({
+  Widget _buildBottomAppBar() {
+    return BottomAppBar(
+      color: Colors.grey[900],
+      shape: const CircularNotchedRectangle(),
+      notchMargin: 8.0,
+      child: SizedBox(
+        height: 60,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            // Left side - 2 icons
+            _buildNavIconButton(
+              icon: Icons.home_rounded,
+              index: 0,
+            ),
+            _buildNavIconButton(
+              icon: Icons.explore_rounded,
+              index: 1,
+            ),
+            
+            // Center spacer for FAB
+            const SizedBox(width: 48),
+            
+            // Right side - 2 icons
+            _buildNavIconButton(
+              icon: Icons.chat_bubble_rounded,
+              index: 2,
+            ),
+            _buildNavIconButton(
+              icon: Icons.person_rounded,
+              index: 3,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavIconButton({
     required IconData icon,
-    required String label,
     required int index,
-    bool isCenter = false,
   }) {
     final isSelected = _currentNavIndex == index;
     final color = isSelected ? NeoColors.accent : NeoColors.textTertiary;
     
-    return GestureDetector(
-      onTap: () => _onNavTap(index),
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: NeoSpacing.sm,
-          vertical: NeoSpacing.xs,
+    return IconButton(
+      icon: Icon(icon, color: color, size: 28),
+      onPressed: () => _onNavTap(index),
+      padding: EdgeInsets.zero,
+    );
+  }
+
+  Widget _buildProfilePlaceholder() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.person_rounded,
+            size: 64,
+            color: NeoColors.textTertiary,
+          ),
+          const SizedBox(height: NeoSpacing.md),
+          Text(
+            'Perfil',
+            style: NeoTextStyles.headlineMedium,
+          ),
+          const SizedBox(height: NeoSpacing.sm),
+          Text(
+            'Próximamente',
+            style: NeoTextStyles.bodyMedium.copyWith(
+              color: NeoColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CREATION OPTIONS MODAL
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  void _showCreationOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF1F1F1F),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (isCenter)
-              SizedBox(
-                width: 56,
-                height: 56,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: const LinearGradient(
-                      colors: [NeoColors.accent, Color(0xFF8B5CF6)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: NeoColors.accent.withValues(alpha: 0.4),
-                        blurRadius: 15,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: const Center(
-                    child: Icon(
-                      Icons.add_rounded,
-                      color: Colors.white,
-                      size: 32,
-                    ),
-                  ),
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Title
+            const Text(
+              'Crear',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Options Grid
+            GridView.count(
+              shrinkWrap: true,
+              crossAxisCount: 2,
+              mainAxisSpacing: 16,
+              crossAxisSpacing: 16,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                _buildCreationOption(
+                  icon: Icons.add_circle_rounded,
+                  label: 'Crear Comunidad',
+                  color: const Color(0xFF8B5CF6), // Purple
+                  onTap: () {
+                    Navigator.pop(context);
+                    // TODO: Navigate to create community
+                  },
                 ),
-              )
-            else ...[
-               Icon(
-                 icon, 
-                 color: color, 
-                 size: 28,
-               ),
-               if (isSelected) ...[
-                 const SizedBox(height: 4),
-                 SizedBox(
-                   width: 4, 
-                   height: 4, 
-                   child: DecoratedBox(
-                     decoration: const BoxDecoration(
-                       color: NeoColors.accent, 
-                       shape: BoxShape.circle,
-                     ),
-                   ),
-                 ),
-               ],
-            ],
+                _buildCreationOption(
+                  icon: Icons.vpn_key_rounded,
+                  label: 'Código de Invitación',
+                  color: const Color(0xFFF59E0B), // Amber
+                  onTap: () {
+                    Navigator.pop(context);
+                    // TODO: Show invitation code dialog
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCreationOption({
+    required IconData icon,
+    required String label,
+    required Color color,
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap ?? () {
+        Navigator.pop(context);
+        // TODO: Implement creation action based on type
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: color.withValues(alpha: 0.3),
+            width: 1,
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              color: color,
+              size: 32,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
           ],
         ),
       ),
@@ -767,18 +930,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   void _onNavTap(int index) {
     setState(() => _currentNavIndex = index);
-    
-    switch (index) {
-      case 1:
-        // TODO: Navigate to create community
-        break;
-      case 2:
-        // TODO: Navigate to chats
-        break;
-      case 3:
-        _showProfileMenu();
-        break;
-    }
   }
 
   void _goToMarket() {
