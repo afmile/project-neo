@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:project_neo/core/theme/neo_theme.dart';
 import 'package:project_neo/features/home/presentation/providers/home_providers.dart';
 import 'package:project_neo/features/home/presentation/widgets/community_card.dart';
+import 'package:project_neo/features/community/presentation/screens/create_community_screen.dart';
 
 class DiscoveryScreen extends ConsumerStatefulWidget {
   const DiscoveryScreen({super.key});
@@ -41,22 +42,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
             
             const SizedBox(height: NeoSpacing.lg),
             
-            // Featured Banner (Optional)
-            _buildFeaturedBanner(),
-            
-            const SizedBox(height: NeoSpacing.lg),
-            
-            // Recommended Communities
-            _buildRecommendedSection(),
-            
-            const SizedBox(height: NeoSpacing.lg),
-            
-            // Recent Communities
-            _buildRecentSection(),
-            
-            const SizedBox(height: NeoSpacing.lg),
-            
-            // All Communities Catalog
+            // All Communities Catalog (main focus now)
             _buildAllCommunitiesSection(),
             
             const SizedBox(height: 100), // Bottom padding
@@ -191,211 +177,11 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // FEATURED BANNER
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  Widget _buildFeaturedBanner() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: NeoSpacing.md),
-      child: Container(
-        height: 160,
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF8B5CF6), // Violet
-              Color(0xFFEC4899), // Pink
-            ],
-          ),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            // Background pattern
-            Positioned.fill(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: Opacity(
-                  opacity: 0.1,
-                  child: Image.asset(
-                    'assets/images/pattern.png',
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const SizedBox(),
-                  ),
-                ),
-              ),
-            ),
-            // Content
-            Padding(
-              padding: const EdgeInsets.all(NeoSpacing.md),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Text(
-                      '⭐ DESTACADO',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: NeoSpacing.sm),
-                  const Text(
-                    'Comunidad de la Semana',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  const Flexible(
-                    child: Text(
-                      'Únete a Gaming Zone y descubre miles de gamers',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 13,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // RECOMMENDED SECTION
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  Widget _buildRecommendedSection() {
-    final communities = ref.watch(recommendedCommunitiesProvider);
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: NeoSpacing.md),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.stars_rounded,
-                size: 20,
-                color: Colors.amber,
-              ),
-              const SizedBox(width: NeoSpacing.sm),
-              Text(
-                'Recomendadas',
-                style: NeoTextStyles.headlineMedium,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: NeoSpacing.sm),
-        SizedBox(
-          height: 180,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: NeoSpacing.md),
-            itemCount: communities.length,
-            itemBuilder: (context, index) {
-              final community = communities[index];
-              return CommunityCard(
-                title: community.title,
-                imageUrl: community.bannerUrl,
-                memberCount: community.memberCount,
-                communityId: community.id,
-                onTap: () => context.push('/community_preview', extra: community),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // RECENT SECTION
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  Widget _buildRecentSection() {
-    final communities = ref.watch(recentCommunitiesProvider);
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: NeoSpacing.md),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.access_time_rounded,
-                size: 20,
-                color: NeoColors.success,
-              ),
-              const SizedBox(width: NeoSpacing.sm),
-              Text(
-                'Nuevas y Recientes',
-                style: NeoTextStyles.headlineMedium,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: NeoSpacing.sm),
-        SizedBox(
-          height: 180,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: NeoSpacing.md),
-            itemCount: communities.length,
-            itemBuilder: (context, index) {
-              final community = communities[index];
-              return CommunityCard(
-                title: community.title,
-                imageUrl: community.bannerUrl,
-                memberCount: community.memberCount,
-                communityId: community.id,
-                onTap: () => context.push('/community_preview', extra: community),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ALL COMMUNITIES CATALOG
+  // ALL COMMUNITIES CATALOG - NOW WITH REAL DATA
   // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildAllCommunitiesSection() {
-    final communities = ref.watch(discoveryFilteredCommunitiesProvider);
+    final communitiesAsync = ref.watch(discoveryFilteredCommunitiesProvider);
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -406,13 +192,17 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Todo el Catálogo',
+                'Comunidades',
                 style: NeoTextStyles.headlineMedium,
               ),
-              Text(
-                '${communities.length} comunidades',
-                style: NeoTextStyles.labelMedium.copyWith(
-                  color: NeoColors.textSecondary,
+              communitiesAsync.when(
+                loading: () => const SizedBox.shrink(),
+                error: (_, __) => const SizedBox.shrink(),
+                data: (communities) => Text(
+                  '${communities.length} encontradas',
+                  style: NeoTextStyles.labelMedium.copyWith(
+                    color: NeoColors.textSecondary,
+                  ),
                 ),
               ),
             ],
@@ -420,52 +210,133 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
         ),
         const SizedBox(height: NeoSpacing.sm),
         
-        if (communities.isEmpty)
-          _buildEmptyResults()
-        else
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: NeoSpacing.md),
-            child: GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                childAspectRatio: 0.8,
-                crossAxisSpacing: NeoSpacing.md,
-                mainAxisSpacing: NeoSpacing.md,
-              ),
-              itemCount: communities.length,
-              itemBuilder: (context, index) {
-                final community = communities[index];
-                return CommunityCard(
-                  title: community.title,
-                  imageUrl: community.bannerUrl,
-                  memberCount: community.memberCount,
-                  communityId: community.id,
-                  onTap: () => context.push('/community_preview', extra: community),
-                );
-              },
-            ),
-          ),
+        communitiesAsync.when(
+          loading: () => _buildLoadingGrid(),
+          error: (error, _) => _buildErrorState(error.toString()),
+          data: (communities) => communities.isEmpty
+              ? _buildEmptyState()
+              : Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: NeoSpacing.md),
+                  child: GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      childAspectRatio: 0.8,
+                      crossAxisSpacing: NeoSpacing.md,
+                      mainAxisSpacing: NeoSpacing.md,
+                    ),
+                    itemCount: communities.length,
+                    itemBuilder: (context, index) {
+                      final community = communities[index];
+                      return CommunityCard(
+                        title: community.title,
+                        imageUrl: community.bannerUrl,
+                        memberCount: community.memberCount,
+                        communityId: community.id,
+                        onTap: () => context.push('/community_preview', extra: community),
+                      );
+                    },
+                  ),
+                ),
+        ),
       ],
     );
   }
 
-  Widget _buildEmptyResults() {
+  Widget _buildLoadingGrid() {
+    return Padding(
+      padding: const EdgeInsets.all(NeoSpacing.xl),
+      child: Center(
+        child: CircularProgressIndicator(color: NeoColors.accent),
+      ),
+    );
+  }
+
+  Widget _buildErrorState(String error) {
     return Padding(
       padding: const EdgeInsets.all(NeoSpacing.xl),
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.search_off, size: 48, color: NeoColors.textTertiary),
+            Icon(Icons.error_outline, size: 48, color: NeoColors.error),
             const SizedBox(height: NeoSpacing.md),
             Text(
-              'No se encontraron comunidades',
-              style: NeoTextStyles.bodyLarge.copyWith(color: NeoColors.textSecondary),
+              'Error cargando comunidades',
+              style: NeoTextStyles.bodyLarge.copyWith(color: Colors.white),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Padding(
+      padding: const EdgeInsets.all(NeoSpacing.xl),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.explore_off_outlined,
+              size: 64,
+              color: NeoColors.textTertiary,
+            ),
+            const SizedBox(height: NeoSpacing.md),
+            Text(
+              'No hay comunidades aún',
+              style: NeoTextStyles.headlineSmall.copyWith(color: Colors.white),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: NeoSpacing.sm),
+            Text(
+              '¡Sé el primero en crear una!',
+              style: NeoTextStyles.bodyMedium.copyWith(color: NeoColors.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: NeoSpacing.lg),
+            ElevatedButton.icon(
+              onPressed: _navigateToCreateCommunity,
+              icon: const Icon(Icons.add),
+              label: const Text('Crear Comunidad'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: NeoColors.accent,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _navigateToCreateCommunity() {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            const CommunityWizardScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.1),
+                end: Offset.zero,
+              ).animate(CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOutCubic,
+              )),
+              child: child,
+            ),
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 400),
       ),
     );
   }

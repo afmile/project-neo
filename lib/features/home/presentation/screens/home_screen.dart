@@ -598,7 +598,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildRecommendedSection() {
-    final communities = ref.watch(recommendedCommunitiesProvider);
+    final communitiesAsync = ref.watch(recommendedCommunitiesProvider);
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -617,7 +617,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                   const SizedBox(width: NeoSpacing.sm),
                   Text(
-                    'Recomendadas',
+                    'Descubrir',
                     style: NeoTextStyles.headlineMedium,
                   ),
                 ],
@@ -635,8 +635,63 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ),
         const SizedBox(height: NeoSpacing.sm),
-        _buildCommunityList(communities),
+        communitiesAsync.when(
+          loading: () => _buildCommunitiesLoading(),
+          error: (error, _) => _buildCommunitiesError('Error'),
+          data: (communities) => communities.isEmpty
+              ? _buildDiscoverEmptyState()
+              : _buildCommunityList(communities),
+        ),
       ],
+    );
+  }
+
+  /// Empty state widget for Discover section
+  Widget _buildDiscoverEmptyState() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(horizontal: NeoSpacing.md),
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: NeoColors.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: NeoColors.border),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.explore_off_outlined,
+            size: 48,
+            color: NeoColors.textTertiary,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No hay comunidades aún',
+            style: NeoTextStyles.headlineSmall.copyWith(color: Colors.white),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '¡Sé el primero en crear una!',
+            style: NeoTextStyles.bodyMedium.copyWith(color: NeoColors.textSecondary),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: _navigateToCreateCommunity,
+            icon: const Icon(Icons.add),
+            label: const Text('Crear Comunidad'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: NeoColors.accent,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -687,45 +742,55 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildRecentSection() {
-    final communities = ref.watch(recentCommunitiesProvider);
+    final communitiesAsync = ref.watch(recentCommunitiesProvider);
     
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: NeoSpacing.md),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
+    return communitiesAsync.when(
+      loading: () => const SizedBox.shrink(), // Don't show loading for this section
+      error: (_, __) => const SizedBox.shrink(), // Don't show errors for this section
+      data: (communities) {
+        if (communities.isEmpty) {
+          return const SizedBox.shrink(); // Hide section if no communities
+        }
+        
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: NeoSpacing.md),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Icon(
-                    Icons.access_time_rounded,
-                    size: 20,
-                    color: NeoColors.success,
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.access_time_rounded,
+                        size: 20,
+                        color: NeoColors.success,
+                      ),
+                      const SizedBox(width: NeoSpacing.sm),
+                      Text(
+                        'Recientes',
+                        style: NeoTextStyles.headlineMedium,
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: NeoSpacing.sm),
-                  Text(
-                    'Recientes',
-                    style: NeoTextStyles.headlineMedium,
+                  TextButton(
+                    onPressed: () {},
+                    child: Text(
+                      'Ver más',
+                      style: NeoTextStyles.labelMedium.copyWith(
+                        color: NeoColors.accent,
+                      ),
+                    ),
                   ),
                 ],
               ),
-              TextButton(
-                onPressed: () {},
-                child: Text(
-                  'Ver más',
-                  style: NeoTextStyles.labelMedium.copyWith(
-                    color: NeoColors.accent,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: NeoSpacing.sm),
-        _buildCommunityList(communities),
-      ],
+            ),
+            const SizedBox(height: NeoSpacing.sm),
+            _buildCommunityList(communities),
+          ],
+        );
+      },
     );
   }
 

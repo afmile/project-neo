@@ -187,28 +187,15 @@ class NeoFeedCard extends ConsumerWidget {
       // User is a member → Navigate to blog detail
       context.push('/blog_detail', extra: post);
     } else {
-      // User is NOT a member → Navigate to community preview first
-      // Find the community entity from all communities
-      final allCommunities = ref.read(allCommunitiesProvider);
-      final community = allCommunities.firstWhere(
-        (c) => c.id == post.communityId,
-        orElse: () {
-          // Fallback: try recommended communities
-          final recommended = ref.read(recommendedCommunitiesProvider);
-          return recommended.firstWhere(
-            (c) => c.id == post.communityId,
-            orElse: () {
-              // Fallback: try recent communities
-              final recent = ref.read(recentCommunitiesProvider);
-              return recent.firstWhere(
-                (c) => c.id == post.communityId,
-              );
-            },
-          );
-        },
-      );
-      
-      context.push('/community_preview', extra: community);
+      // User is NOT a member → Navigate to community preview
+      // Since allCommunitiesProvider is now async, we handle it differently
+      final allCommunitiesAsync = ref.read(allCommunitiesProvider);
+      allCommunitiesAsync.whenData((allCommunities) {
+        final community = allCommunities.where((c) => c.id == post.communityId).firstOrNull;
+        if (community != null) {
+          context.push('/community_preview', extra: community);
+        }
+      });
     }
   }
 
