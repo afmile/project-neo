@@ -1,0 +1,89 @@
+/// Project Neo - Wall Post Entity
+///
+/// Represents a post on a user's community wall
+library;
+
+import 'package:equatable/equatable.dart';
+
+/// Privacy levels for wall posts
+enum WallPrivacyLevel {
+  /// Anyone can post
+  public,
+  
+  /// Only mutual friends can post
+  friendsOnly,
+  
+  /// Only the profile owner can post
+  closed,
+}
+
+class WallPost extends Equatable {
+  /// Unique post ID
+  final String id;
+  
+  /// Author's user ID
+  final String authorId;
+  
+  /// Author's display name
+  final String authorName;
+  
+  /// Author's avatar URL
+  final String? authorAvatar;
+  
+  /// Post content/message
+  final String content;
+  
+  /// When the post was created
+  final DateTime timestamp;
+  
+  /// Number of likes
+  final int likes;
+  
+  /// Whether current user has liked this post
+  final bool isLikedByCurrentUser;
+
+  const WallPost({
+    required this.id,
+    required this.authorId,
+    required this.authorName,
+    this.authorAvatar,
+    required this.content,
+    required this.timestamp,
+    this.likes = 0,
+    this.isLikedByCurrentUser = false,
+  });
+
+  WallPost copyWith({
+    String? id,
+    String? authorId,
+    String? authorName,
+    String? authorAvatar,
+    String? content,
+    DateTime? timestamp,
+    int? likes,
+    bool? isLikedByCurrentUser,
+  }) {
+    return WallPost(
+      id: id ?? this.id,
+      authorId: authorId ?? this.authorId,
+      authorName: authorName ?? this.authorName,
+      authorAvatar: authorAvatar ?? this.authorAvatar,
+      content: content ?? this.content,
+      timestamp: timestamp ?? this.timestamp,
+      likes: likes ?? this.likes,
+      isLikedByCurrentUser: isLikedByCurrentUser ?? this.isLikedByCurrentUser,
+    );
+  }
+
+  @override
+  List<Object?> get props => [
+        id,
+        authorId,
+        authorName,
+        authorAvatar,
+        content,
+        timestamp,
+        likes,
+        isLikedByCurrentUser,
+      ];
+}

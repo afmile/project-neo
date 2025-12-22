@@ -13,6 +13,9 @@ import '../widgets/facepile_widget.dart';
 import '../widgets/live_indicator_widget.dart';
 import '../../../chat/presentation/screens/community_chats_screen.dart';
 import '../../../chat/presentation/widgets/chat_catalog_grid.dart';
+import 'community_user_profile_screen.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import 'community_friends_tab.dart';
 
 class CommunityHomeScreen extends ConsumerStatefulWidget {
   final CommunityEntity community;
@@ -84,7 +87,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
       case 0:
         return _buildInicioView(); // Feed
       case 1:
-        return _buildMiembrosView(); // Members
+        return CommunityFriendsTab(communityId: widget.community.id); // Friends
       case 2:
         return _buildInicioView(); // Center button - same as feed
       case 3:
@@ -584,60 +587,82 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   }
 
   Widget _buildMemberItem(String name, {required bool isLeader}) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: NeoSpacing.sm),
-      padding: const EdgeInsets.all(NeoSpacing.md),
-      decoration: BoxDecoration(
-        color: NeoColors.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: NeoColors.border, width: 1),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: (isLeader ? Colors.amber : NeoColors.accent)
-                  .withValues(alpha: 0.2),
-              border: Border.all(
-                color: isLeader ? Colors.amber : NeoColors.accent,
-                width: 2,
-              ),
-            ),
-            child: Icon(
-              Icons.person_rounded,
-              color: isLeader ? Colors.amber : NeoColors.accent,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: NeoSpacing.md),
-          Expanded(
-            child: Text(
-              name,
-              style: NeoTextStyles.bodyLarge.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          if (isLeader)
+    // Generate a mock user ID based on name
+    final userId = 'user_${name.replaceAll(' ', '_').toLowerCase()}';
+    
+    return InkWell(
+      onTap: () {
+        // Navigate to user profile
+        Navigator.of(context).pushNamed(
+          '/community-user-profile',
+          arguments: {
+            'userId': userId,
+            'communityId': widget.community.id,
+          },
+        );
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: NeoSpacing.sm),
+        padding: const EdgeInsets.all(NeoSpacing.md),
+        decoration: BoxDecoration(
+          color: NeoColors.card,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: NeoColors.border, width: 1),
+        ),
+        child: Row(
+          children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
-                color: Colors.amber.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(8),
+                shape: BoxShape.circle,
+                color: (isLeader ? Colors.amber : NeoColors.accent)
+                    .withValues(alpha: 0.2),
+                border: Border.all(
+                  color: isLeader ? Colors.amber : NeoColors.accent,
+                  width: 2,
+                ),
               ),
+              child: Icon(
+                Icons.person_rounded,
+                color: isLeader ? Colors.amber : NeoColors.accent,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: NeoSpacing.md),
+            Expanded(
               child: Text(
-                'LÍDER',
-                style: NeoTextStyles.labelSmall.copyWith(
-                  color: Colors.amber,
-                  fontWeight: FontWeight.bold,
+                name,
+                style: NeoTextStyles.bodyLarge.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-        ],
+            if (isLeader)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'LÍDER',
+                  style: NeoTextStyles.labelSmall.copyWith(
+                    color: Colors.amber,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            const SizedBox(width: NeoSpacing.xs),
+            Icon(
+              Icons.chevron_right,
+              color: NeoColors.textTertiary,
+              size: 20,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -651,68 +676,14 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   }
 
   Widget _buildPerfilView() {
-    return CustomScrollView(
-      slivers: [
-        SliverAppBar(
-          pinned: true,
-          backgroundColor: const Color(0xFF1A1A1A),
-          title: const Text('Mi Perfil'),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => setState(() => _currentNavIndex = 0),
-          ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.all(16),
-          sliver: SliverToBoxAdapter(
-            child: Column(
-              children: [
-                // Avatar
-                Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: NeoColors.accent.withValues(alpha: 0.2),
-                    border: Border.all(color: NeoColors.accent, width: 3),
-                  ),
-                  child: const Icon(
-                    Icons.person,
-                    size: 50,
-                    color: NeoColors.accent,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Usuario Demo',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Miembro desde hace 3 meses',
-                  style: NeoTextStyles.bodyMedium.copyWith(
-                    color: NeoColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                // Stats
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildStatItem('Posts', '42'),
-                    _buildStatItem('Likes', '1.2K'),
-                    _buildStatItem('Comments', '328'),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
+    // Get current user ID
+    final currentUser = ref.watch(currentUserProvider);
+    final userId = currentUser?.id ?? 'current_user_id'; // Fallback for demo
+    
+    // Render the actual CommunityUserProfileScreen
+    return CommunityUserProfileScreen(
+      userId: userId,
+      communityId: widget.community.id,
     );
   }
 
@@ -753,7 +724,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             _buildNavItem(Icons.home, 'Inicio', 0),
-            _buildNavItem(Icons.people, 'Miembros', 1),
+            _buildNavItem(Icons.people_alt, 'Amig@s', 1),
             const SizedBox(width: 48), // Space for FAB
             _buildNavItem(Icons.chat_bubble, 'Chats', 3),
             _buildNavItem(Icons.person, 'Perfil', 4),
@@ -821,7 +792,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
               // Chats tab
               _showChatCreateModal();
             } else {
-              // Inicio, Miembros, Perfil tabs
+              // Inicio, Amig@s, Perfil tabs
               _showGeneralCreateModal();
             }
           },
