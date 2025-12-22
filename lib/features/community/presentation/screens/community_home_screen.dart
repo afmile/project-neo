@@ -638,10 +638,21 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // CHATS VIEW - INDEX 3
+  // CHATS VIEW - INDEX 3 (BENTO GRID)
   // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildChatsView() {
+    // Dummy chat data with live status
+    final chats = List.generate(8, (index) {
+      return {
+        'name': 'Chat ${_getChatName(index)}',
+        'lastMessage': _getChatLastMessage(index),
+        'wallpaper': _getChatWallpaper(index),
+        'hasAudio': index % 3 == 0, // Every 3rd has audio
+        'hasVideo': index % 4 == 0, // Every 4th has video
+      };
+    });
+
     return CustomScrollView(
       slivers: [
         SliverAppBar(
@@ -654,70 +665,258 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
           ),
         ),
         SliverPadding(
-          padding: const EdgeInsets.all(16),
-          sliver: SliverList(
+          padding: const EdgeInsets.all(12),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 0.85,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
             delegate: SliverChildBuilderDelegate(
-              (context, index) => _buildChatItem('Chat Público ${index + 1}'),
-              childCount: 8,
+              (context, index) {
+                final chat = chats[index];
+                return _buildChatCard(
+                  name: chat['name'] as String,
+                  lastMessage: chat['lastMessage'] as String,
+                  wallpaper: chat['wallpaper'] as List<Color>,
+                  hasAudio: chat['hasAudio'] as bool,
+                  hasVideo: chat['hasVideo'] as bool,
+                );
+              },
+              childCount: chats.length,
             ),
           ),
         ),
+        const SliverToBoxAdapter(child: SizedBox(height: 80)),
       ],
     );
   }
 
-  Widget _buildChatItem(String name) {
+  Widget _buildChatCard({
+    required String name,
+    required String lastMessage,
+    required List<Color> wallpaper,
+    required bool hasAudio,
+    required bool hasVideo,
+  }) {
+    // Determine border color based on live status
+    Color? borderColor;
+    IconData? statusIcon;
+    
+    if (hasVideo) {
+      borderColor = const Color(0xFFEF4444); // Red neon
+      statusIcon = Icons.fiber_manual_record; // REC icon
+    } else if (hasAudio) {
+      borderColor = const Color(0xFF10B981); // Green neon
+      statusIcon = Icons.volume_up;
+    }
+
     return Container(
-      margin: const EdgeInsets.only(bottom: NeoSpacing.sm),
-      padding: const EdgeInsets.all(NeoSpacing.md),
       decoration: BoxDecoration(
-        color: NeoColors.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: NeoColors.border, width: 1),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: NeoColors.accent.withValues(alpha: 0.2),
-            ),
-            child: const Icon(
-              Icons.chat_bubble_rounded,
-              color: NeoColors.accent,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: NeoSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: NeoTextStyles.bodyLarge.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Último mensaje del chat...',
-                  style: NeoTextStyles.bodySmall.copyWith(
-                    color: NeoColors.textSecondary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(
+          children: [
+            // Wallpaper background (darkened)
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: wallpaper,
+                  ),
+                ),
+              ),
+            ),
+
+            // Dark overlay
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.4),
+                      Colors.black.withValues(alpha: 0.7),
+                      Colors.black.withValues(alpha: 0.9),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // Content
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Logo with live status border
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: borderColor != null
+                          ? Border.all(
+                              color: borderColor,
+                              width: 3,
+                            )
+                          : null,
+                      boxShadow: borderColor != null
+                          ? [
+                              BoxShadow(
+                                color: borderColor.withValues(alpha: 0.6),
+                                blurRadius: 12,
+                                spreadRadius: 2,
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: NeoColors.card,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.1),
+                          width: 2,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.chat_bubble_rounded,
+                        color: NeoColors.accent,
+                        size: 28,
+                      ),
+                    ),
+                  ),
+
+                  // Status icon (if live)
+                  if (statusIcon != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: borderColor!.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: borderColor,
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            statusIcon,
+                            color: borderColor,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            hasVideo ? 'LIVE' : 'AUDIO',
+                            style: TextStyle(
+                              color: borderColor,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  const Spacer(),
+
+                  // Footer: Name and last message
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      height: 1.2,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    lastMessage,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.7),
+                      fontSize: 12,
+                      height: 1.3,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
+
+  String _getChatName(int index) {
+    final names = [
+      'General',
+      'Anime Lovers',
+      'Gaming Zone',
+      'Off-Topic',
+      'Cine Club',
+      'Arte y Diseño',
+      'Música',
+      'Memes',
+    ];
+    return names[index % names.length];
+  }
+
+  String _getChatLastMessage(int index) {
+    final messages = [
+      'Hola a todos! Cómo están?',
+      'Alguien vio el último episodio?',
+      'GG! Buena partida',
+      'jajaja ese meme está buenísimo',
+      'Vamos a ver la película en 10 min',
+      'Increíble ese fan art!',
+      '🎵 Escuchando lo nuevo de...',
+      'JAJAJAJA no puede ser',
+    ];
+    return messages[index % messages.length];
+  }
+
+  List<Color> _getChatWallpaper(int index) {
+    final wallpapers = [
+      [const Color(0xFF1E3A8A), const Color(0xFF3B82F6)], // Blue
+      [const Color(0xFF7C2D12), const Color(0xFFEF4444)], // Red
+      [const Color(0xFF065F46), const Color(0xFF10B981)], // Green
+      [const Color(0xFF7C2D12), const Color(0xFFF59E0B)], // Orange
+      [const Color(0xFF581C87), const Color(0xFF8B5CF6)], // Purple
+      [const Color(0xFF831843), const Color(0xFFEC4899)], // Pink
+      [const Color(0xFF164E63), const Color(0xFF06B6D4)], // Cyan
+      [const Color(0xFF713F12), const Color(0xFFFBBF24)], // Yellow
+    ];
+    return wallpapers[index % wallpapers.length];
+  }
+
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PERFIL VIEW - INDEX 4
