@@ -6,11 +6,13 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/config/supabase_config.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/neo_theme.dart';
 import 'core/theme/theme_provider.dart';
+import 'features/community/presentation/providers/content_providers.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +27,9 @@ void main() async {
     ),
   );
   
+  // Initialize SharedPreferences for drafts
+  final prefs = await SharedPreferences.getInstance();
+  
   // Initialize Supabase with provided credentials
   await Supabase.initialize(
     url: SupabaseConfig.url,
@@ -35,8 +40,12 @@ void main() async {
   );
   
   runApp(
-    const ProviderScope(
-      child: ProjectNeoApp(),
+    ProviderScope(
+      overrides: [
+        // Override SharedPreferences provider with initialized instance
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
+      child: const ProjectNeoApp(),
     ),
   );
 }

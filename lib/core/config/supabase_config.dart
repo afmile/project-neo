@@ -11,7 +11,7 @@ class SupabaseConfig {
   static const String url = 'https://gdyetkqconuvyqbqxdom.supabase.co';
   
   /// Supabase anon/public key
-  static const String anonKey = 'sb_publishable_0r1KacQRiOQyNJzXUrp1jg_qeRVKuKW';
+  static const String anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdkeWV0a3Fjb251dnlxYnF4ZG9tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwMTMxOTcsImV4cCI6MjA4MTU4OTE5N30.Fhy-dZAn6VuS_I84p0eoQA6nFS7QH0XOaGLCMrRQpdk';
   
   /// Google OAuth Web Client ID (required for Google Sign In)
   /// You need to get this from Google Cloud Console

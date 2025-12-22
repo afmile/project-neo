@@ -262,6 +262,54 @@ CREATE TRIGGER set_channels_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION public.handle_updated_at();
 
+-- Configuracion de pestañas de comunidad
+CREATE TABLE public.community_tabs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    community_id UUID NOT NULL REFERENCES public.communities(id) ON DELETE CASCADE,
+    label VARCHAR(50) NOT NULL,
+    type VARCHAR(20) NOT NULL, -- 'feed', 'chat', 'members', 'about', 'custom'
+    sort_order INT DEFAULT 0 NOT NULL,
+    is_visible BOOLEAN DEFAULT TRUE NOT NULL,
+    config JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+CREATE INDEX idx_community_tabs_community ON public.community_tabs(community_id);
+CREATE INDEX idx_community_tabs_order ON public.community_tabs(community_id, sort_order);
+
+CREATE TRIGGER set_community_tabs_updated_at
+    BEFORE UPDATE ON public.community_tabs
+    FOR EACH ROW
+    EXECUTE FUNCTION public.handle_updated_at();
+
+-- Publicaciones de comunidad
+CREATE TABLE public.community_posts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    community_id UUID NOT NULL REFERENCES public.communities(id) ON DELETE CASCADE,
+    author_id UUID NOT NULL REFERENCES public.users_global(id) ON DELETE CASCADE,
+    title VARCHAR(200),
+    content TEXT,
+    content_rich JSONB, -- Para contenido estructurado (bloques)
+    media_urls TEXT[] DEFAULT '{}',
+    is_pinned BOOLEAN DEFAULT FALSE NOT NULL,
+    pin_size VARCHAR(20) DEFAULT 'normal', -- 'normal', 'large', 'hero'
+    reactions_count INT DEFAULT 0 NOT NULL,
+    comments_count INT DEFAULT 0 NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+CREATE INDEX idx_community_posts_community ON public.community_posts(community_id);
+CREATE INDEX idx_community_posts_author ON public.community_posts(author_id);
+CREATE INDEX idx_community_posts_pinned ON public.community_posts(community_id, is_pinned) WHERE is_pinned = TRUE;
+CREATE INDEX idx_community_posts_created ON public.community_posts(created_at DESC);
+
+CREATE TRIGGER set_community_posts_updated_at
+    BEFORE UPDATE ON public.community_posts
+    FOR EACH ROW
+    EXECUTE FUNCTION public.handle_updated_at();
+
 -- ============================================================================
 -- 3. ECONOMÍA & STREAMING (Modelo de Negocio)
 -- ============================================================================
@@ -540,6 +588,8 @@ ALTER TABLE public.streaming_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transactions_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.unit_costs_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.daily_usage_metrics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.community_tabs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.community_posts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_log ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================================
@@ -798,6 +848,72 @@ CREATE POLICY "active_boosts_select_member" ON public.active_boosts
 -- active_boosts: Usuarios pueden comprar boosts
 CREATE POLICY "active_boosts_insert_own" ON public.active_boosts
     FOR INSERT
+    WITH CHECK (payer_user_id = auth.uid());
+
+-- community_tabs: Visible para todos (público)
+CREATE POLICY "community_tabs_select_public" ON public.community_tabs
+    FOR SELECT
+    USING (TRUE);
+    
+-- community_tabs: Solo dueños pueden editar
+CREATE POLICY "community_tabs_all_owner" ON public.community_tabs
+    FOR ALL
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.communities 
+            WHERE id = community_tabs.community_id 
+            AND owner_id = auth.uid()
+        )
+    );
+
+-- community_posts: Visible para todos si la comunidad es pública o si es miembro
+CREATE POLICY "community_posts_select_viewable" ON public.community_posts
+    FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.communities c
+            WHERE c.id = community_posts.community_id
+            AND (
+                c.is_private = FALSE
+                OR c.owner_id = auth.uid()
+                OR EXISTS (
+                    SELECT 1 FROM public.memberships m
+                    WHERE m.community_id = c.id
+                    AND m.user_id = auth.uid()
+                )
+            )
+        )
+    );
+
+-- community_posts: Miembros pueden crear posts
+CREATE POLICY "community_posts_insert_member" ON public.community_posts
+    FOR INSERT
+    WITH CHECK (
+        auth.uid() = author_id
+        AND EXISTS (
+             SELECT 1 FROM public.memberships m
+             WHERE m.community_id = community_id
+             AND m.user_id = auth.uid()
+        )
+    );
+
+-- community_posts: Autor puede editar sus posts
+CREATE POLICY "community_posts_update_own" ON public.community_posts
+    FOR UPDATE
+    USING (auth.uid() = author_id);
+    
+-- community_posts: Autor y Admins pueden eliminar posts
+CREATE POLICY "community_posts_delete_own_or_admin" ON public.community_posts
+    FOR DELETE
+    USING (
+        auth.uid() = author_id
+        OR EXISTS (
+             SELECT 1 FROM public.memberships m
+             WHERE m.community_id = community_posts.community_id
+             AND m.user_id = auth.uid()
+             AND m.role IN ('owner', 'agent', 'leader')
+        )
+    );
     WITH CHECK (payer_user_id = auth.uid());
 
 -- streaming_logs: Usuarios ven sus propios logs

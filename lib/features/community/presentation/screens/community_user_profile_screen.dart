@@ -309,7 +309,12 @@ class _CommunityUserProfileScreenState
   Widget _buildHeader() {
     return SliverToBoxAdapter(
       child: Container(
-        padding: const EdgeInsets.all(NeoSpacing.lg),
+        padding: EdgeInsets.only(
+          top: MediaQuery.of(context).padding.top + 8, // SafeArea padding
+          left: NeoSpacing.md,
+          right: NeoSpacing.md,
+          bottom: NeoSpacing.md,
+        ),
         decoration: BoxDecoration(
           color: Colors.grey[900],
           border: Border(
@@ -321,23 +326,58 @@ class _CommunityUserProfileScreenState
         ),
         child: Column(
           children: [
-            // Back button
+            // Top bar: Back button + NeoCoins
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 IconButton(
                   icon: const Icon(Icons.arrow_back, color: Colors.white),
                   onPressed: () => Navigator.pop(context),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
                 ),
-                const Spacer(),
+                // NeoCoins widget
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: const Color(0xFFFFD700).withValues(alpha: 0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        '🪙',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '1,250',
+                        style: TextStyle(
+                          color: const Color(0xFFFFD700),
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
             
-            const SizedBox(height: NeoSpacing.md),
+            const SizedBox(height: 12),
             
-            // Avatar
+            // Avatar (compacted)
             Container(
-              width: 100,
-              height: 100,
+              width: 80,
+              height: 80,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: NeoColors.accent.withValues(alpha: 0.2),
@@ -349,72 +389,74 @@ class _CommunityUserProfileScreenState
               child: const Icon(
                 Icons.person,
                 color: NeoColors.accent,
-                size: 50,
+                size: 40,
               ),
             ),
             
-            const SizedBox(height: NeoSpacing.md),
+            const SizedBox(height: 8),
             
-            // Username
-            Text(
-              _username,
-              style: NeoTextStyles.headlineLarge.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            
-            const SizedBox(height: NeoSpacing.xs),
-            
-            // Level badge
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 4,
-              ),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF8B5CF6), Color(0xFFEC4899)],
+            // Username + Level badge (same row)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  _username,
+                  style: NeoTextStyles.headlineMedium.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                'Nivel $_level',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF8B5CF6), Color(0xFFEC4899)],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    'Nv $_level',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
             
-            const SizedBox(height: NeoSpacing.md),
+            const SizedBox(height: 8),
             
             // Title Tags - Wrap for multiple tags
             Wrap(
               alignment: WrapAlignment.center,
-              spacing: 8,
-              runSpacing: 8,
+              spacing: 6,
+              runSpacing: 6,
               children: _titleTags
                   .map((tag) => UserTitleTagWidget(tag: tag))
                   .toList(),
             ),
             
-            const SizedBox(height: NeoSpacing.lg),
+            const SizedBox(height: 12),
             
-            // Stats
+            // Stats (compacted)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 _buildStatItem('Seguidores', _followers),
                 Container(
                   width: 1,
-                  height: 40,
+                  height: 30,
                   color: Colors.white24,
                 ),
                 _buildStatItem('Siguiendo', _following),
                 Container(
                   width: 1,
-                  height: 40,
+                  height: 30,
                   color: Colors.white24,
                 ),
                 _buildStatItem('Posts', _posts),
@@ -423,7 +465,7 @@ class _CommunityUserProfileScreenState
             
             // Follow button (hidden if viewing own profile)
             if (!_isOwner) ...[
-              const SizedBox(height: NeoSpacing.lg),
+              const SizedBox(height: 12),
               FollowButton(
                 status: _friendshipStatus,
                 onPressed: () {
@@ -455,7 +497,7 @@ class _CommunityUserProfileScreenState
       children: [
         Text(
           '$value',
-          style: NeoTextStyles.headlineSmall.copyWith(
+          style: NeoTextStyles.bodyLarge.copyWith(
             fontWeight: FontWeight.bold,
             color: NeoColors.accent,
           ),
@@ -464,6 +506,7 @@ class _CommunityUserProfileScreenState
           label,
           style: NeoTextStyles.bodySmall.copyWith(
             color: NeoColors.textSecondary,
+            fontSize: 11,
           ),
         ),
       ],
@@ -476,8 +519,8 @@ class _CommunityUserProfileScreenState
       delegate: _SliverTabBarDelegate(
         TabBar(
           controller: _tabController,
-          indicatorColor: NeoColors.accent,
-          indicatorWeight: 3,
+          indicator: const BoxDecoration(), // Remove line indicator
+          dividerColor: Colors.transparent, // Remove divider
           labelColor: NeoColors.accent,
           unselectedLabelColor: NeoColors.textSecondary,
           labelStyle: const TextStyle(
@@ -588,60 +631,44 @@ class _CommunityUserProfileScreenState
 
   Widget _buildWallInput() {
     return Container(
-      padding: const EdgeInsets.all(NeoSpacing.md),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 8,
+      ),
       decoration: BoxDecoration(
-        color: NeoColors.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-          width: 1,
-        ),
+        color: Colors.grey[850],
+        borderRadius: BorderRadius.circular(30), // Pill shape
       ),
       child: Row(
         children: [
-          // Avatar
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: NeoColors.accent.withValues(alpha: 0.2),
-              border: Border.all(
-                color: NeoColors.accent,
-                width: 2,
-              ),
-            ),
-            child: const Icon(
-              Icons.person,
-              color: NeoColors.accent,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: NeoSpacing.sm),
-          
           // Input field
           Expanded(
             child: TextField(
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: Colors.white, fontSize: 14),
               decoration: InputDecoration(
-                hintText: 'Escribe algo en el muro de $_username...',
+                hintText: 'Escribe en el muro de $_username...',
                 hintStyle: TextStyle(
                   color: Colors.white.withValues(alpha: 0.4),
+                  fontSize: 14,
                 ),
                 border: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
               ),
             ),
           ),
           
-          // Send button
+          // Send button (integrated)
           IconButton(
             icon: const Icon(
               Icons.send,
               color: NeoColors.accent,
+              size: 20,
             ),
             onPressed: () {
               // TODO: Implement post
             },
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
           ),
         ],
       ),
@@ -676,7 +703,7 @@ class _CommunityUserProfileScreenState
           
           // Pinned content (horizontal scroll with reorder)
           SizedBox(
-            height: 120,
+            height: 145, // Increased from 120 to fix overflow
             child: ReorderableListView.builder(
               scrollDirection: Axis.horizontal,
               itemCount: _pinnedContent.length,

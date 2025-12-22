@@ -251,7 +251,13 @@ class _CommunityFriendsTabState extends State<CommunityFriendsTab> {
                     .map((friend) => FriendPresenceAvatar(
                           presence: friend,
                           onTap: () {
-                            // TODO: Navigate to friend's profile
+                            Navigator.of(context).pushNamed(
+                              '/community-user-profile',
+                              arguments: {
+                                'userId': friend.userId,
+                                'communityId': widget.communityId,
+                              },
+                            );
                           },
                         ))
                     .toList(),

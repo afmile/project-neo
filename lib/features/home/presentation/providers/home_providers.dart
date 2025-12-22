@@ -67,7 +67,7 @@ final recommendedCommunitiesProvider = Provider<List<CommunityEntity>>((ref) {
       updatedAt: DateTime.now(),
     ),
     CommunityEntity(
-      id: '2',
+      id: '6b9a4dd8-c080-4d88-a1db-c3d8c459086c',
       ownerId: 'owner2',
       title: 'Tech & Coding',
       slug: 'tech-coding',
@@ -262,7 +262,7 @@ final allCommunitiesProvider = Provider<List<CommunityEntity>>((ref) {
       memberCount: 45230, categoryIds: ['anime', 'art'], language: 'es', 
       ownerId: 'o1', createdAt: DateTime.now(), updatedAt: DateTime.now()),
     CommunityEntity(
-      id: '2', title: 'Tech & Coding', slug: 'tech-coding', 
+      id: '6b9a4dd8-c080-4d88-a1db-c3d8c459086c', title: 'Tech & Coding', slug: 'tech-coding', 
       memberCount: 23400, categoryIds: ['tech'], language: 'en', 
       ownerId: 'o2', createdAt: DateTime.now(), updatedAt: DateTime.now()),
     CommunityEntity(
@@ -360,7 +360,7 @@ final globalFeedProvider = Provider<List<FeedPost>>((ref) {
     ),
     FeedPost(
       id: 'f2',
-      communityId: '2', // Tech & Coding
+      communityId: '6b9a4dd8-c080-4d88-a1db-c3d8c459086c', // Tech & Coding
       communityName: 'Tech & Coding',
       communityAvatar: '💻',
       timeAgo: 'Hace 4h',

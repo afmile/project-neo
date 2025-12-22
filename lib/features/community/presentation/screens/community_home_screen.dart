@@ -6,8 +6,10 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../../community/domain/entities/community_entity.dart';
+import '../../../community/domain/entities/post_entity.dart';
 import '../../../home/presentation/providers/home_providers.dart';
 import '../widgets/facepile_widget.dart';
 import '../widgets/live_indicator_widget.dart';
@@ -16,6 +18,10 @@ import '../../../chat/presentation/widgets/chat_catalog_grid.dart';
 import 'community_user_profile_screen.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import 'community_friends_tab.dart';
+import 'create_content_screen.dart';
+import 'content_detail_screen.dart';
+import '../providers/content_providers.dart';
+import 'community_studio_screen.dart';
 
 class CommunityHomeScreen extends ConsumerStatefulWidget {
   final CommunityEntity community;
@@ -133,6 +139,16 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
         onPressed: () => Navigator.of(context).pop(),
       ),
       actions: [
+        // Neo Studio button for owners
+        if (_isOwner())
+          IconButton(
+            icon: Icon(
+              Icons.settings,
+              color: _parseColor(widget.community.theme.primaryColor),
+            ),
+            tooltip: 'Neo Studio',
+            onPressed: _navigateToStudio,
+          ),
         // Search icon - toggles search mode
         IconButton(
           icon: Icon(
@@ -455,54 +471,387 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
     );
   }
 
-  // Tab content (simplified versions)
+  // Tab content - All use real Supabase data
   Widget _buildDestacadosTab() {
-    final blogs = List.generate(12, (index) => {
-      'title': _getBlogTitle(index),
-      'height': _getBlogHeight(index),
-      'gradient': _getBlogGradient(index),
-    });
-
-    return CustomScrollView(
-      slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.all(12),
-          sliver: SliverMasonryGrid.count(
-            crossAxisCount: 2,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childCount: blogs.length,
-            itemBuilder: (context, index) {
-              final blog = blogs[index];
-              return _buildBlogCard(
-                title: blog['title'] as String,
-                height: blog['height'] as double,
-                gradient: blog['gradient'] as List<Color>,
-              );
-            },
-          ),
-        ),
-        const SliverToBoxAdapter(child: SizedBox(height: 80)),
-      ],
-    );
+    // Destacados shows ALL post types (no filter)
+    return _buildRealFeedTab(null);
   }
 
   Widget _buildBlogsTab() {
-    return const Center(
-      child: Text(
-        'Blogs Tab',
-        style: TextStyle(color: Colors.white, fontSize: 18),
+    return _buildRealFeedTab(PostType.blog);
+  }
+
+  Widget _buildWikisTab() {
+    return _buildRealFeedTab(PostType.wiki);
+  }
+
+  /// Build feed tab using real Supabase data
+  Widget _buildRealFeedTab(PostType? typeFilter) {
+    final feedState = ref.watch(feedProvider((
+      communityId: widget.community.id,
+      typeFilter: typeFilter,
+    )));
+
+    if (feedState.isLoading && feedState.posts.isEmpty) {
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFF6366F1)),
+      );
+    }
+
+    if (feedState.error != null && feedState.posts.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline, size: 48, color: Colors.red.withOpacity(0.5)),
+            const SizedBox(height: 16),
+            Text(
+              feedState.error!,
+              style: TextStyle(color: Colors.white.withOpacity(0.7)),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => ref.read(feedProvider((
+                communityId: widget.community.id,
+                typeFilter: typeFilter,
+              )).notifier).refresh(),
+              child: const Text('Reintentar'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (feedState.posts.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              typeFilter == null 
+                  ? Icons.grid_view_outlined
+                  : typeFilter == PostType.blog 
+                      ? Icons.article_outlined 
+                      : Icons.menu_book_outlined,
+              size: 64,
+              color: Colors.white.withOpacity(0.2),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              typeFilter == null
+                  ? 'No hay contenido aún'
+                  : 'No hay ${typeFilter.displayName}s aún',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.5),
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => _navigateToCreateContent(
+                typeFilter ?? PostType.blog,
+              ),
+              child: const Text('Crear el primero'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () => ref.read(feedProvider((
+        communityId: widget.community.id,
+        typeFilter: typeFilter,
+      )).notifier).refresh(),
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: feedState.posts.length + (feedState.hasMore ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index >= feedState.posts.length) {
+            // Load more trigger
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              ref.read(feedProvider((
+                communityId: widget.community.id,
+                typeFilter: typeFilter,
+              )).notifier).loadMore();
+            });
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            );
+          }
+
+          final post = feedState.posts[index];
+          return _buildPostCard(post);
+        },
       ),
     );
   }
 
-  Widget _buildWikisTab() {
-    return const Center(
-      child: Text(
-        'Wikis Tab',
-        style: TextStyle(color: Colors.white, fontSize: 18),
+  Widget _buildPostCard(PostEntity post) {
+    // Check if this post is rejected and belongs to current user
+    final currentUserId = ref.read(currentUserProvider)?.id;
+    final isOwnRejectedPost = post.moderationStatus == ModerationStatus.rejected 
+        && post.authorId == currentUserId;
+    final isPending = post.moderationStatus == ModerationStatus.pending 
+        && post.authorId == currentUserId;
+        
+    return GestureDetector(
+      onTap: () => _navigateToDetail(post),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A2E),
+          borderRadius: BorderRadius.circular(16),
+          border: isOwnRejectedPost 
+              ? Border.all(color: Colors.red.withOpacity(0.7), width: 2)
+              : isPending 
+                  ? Border.all(color: Colors.amber.withOpacity(0.5), width: 1)
+                  : null,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Rejected warning banner
+            if (isOwnRejectedPost)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.15),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.visibility_off, color: Colors.red.shade300, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Oculto por seguridad',
+                        style: TextStyle(
+                          color: Colors.red.shade300,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    if (post.aiFlaggedReason != null)
+                      Tooltip(
+                        message: post.aiFlaggedReason!,
+                        child: Icon(Icons.info_outline, color: Colors.red.shade300, size: 16),
+                      ),
+                  ],
+                ),
+              ),
+            // Pending banner
+            if (isPending)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withOpacity(0.15),
+                  borderRadius: BorderRadius.vertical(
+                    top: isOwnRejectedPost ? Radius.zero : const Radius.circular(14),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.schedule, color: Colors.amber.shade300, size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Pendiente de revisión',
+                      style: TextStyle(
+                        color: Colors.amber.shade300,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            // Cover image if present
+            if (post.coverImageUrl != null)
+              ClipRRect(
+                borderRadius: BorderRadius.vertical(
+                  top: (isOwnRejectedPost || isPending) ? Radius.zero : const Radius.circular(16),
+                ),
+                child: Image.network(
+                  post.coverImageUrl!,
+                  height: 140,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    height: 140,
+                    color: const Color(0xFF6366F1).withOpacity(0.3),
+                    child: const Icon(Icons.image, color: Colors.white54, size: 48),
+                  ),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Type badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _getTypeBadgeColor(post.postType),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      post.postType.displayName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // Title
+                  Text(
+                    post.title ?? 'Sin título',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                  // Preview
+                  if (post.content != null)
+                    Text(
+                      post.content!,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 14,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  const SizedBox(height: 12),
+                  // Footer
+                  Row(
+                    children: [
+                      // Author
+                      CircleAvatar(
+                        radius: 12,
+                        backgroundColor: const Color(0xFF6366F1),
+                        backgroundImage: post.authorAvatarUrl != null
+                            ? NetworkImage(post.authorAvatarUrl!)
+                            : null,
+                        child: post.authorAvatarUrl == null
+                            ? Text(
+                                (post.authorUsername ?? 'U')[0].toUpperCase(),
+                                style: const TextStyle(color: Colors.white, fontSize: 10),
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        post.authorUsername ?? 'Usuario',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.7),
+                          fontSize: 12,
+                        ),
+                      ),
+                      const Spacer(),
+                      // Reactions
+                      GestureDetector(
+                        onTap: () => _togglePostReaction(post),
+                        child: Row(
+                          children: [
+                            Icon(
+                              post.isLikedByCurrentUser ? Icons.favorite : Icons.favorite_border,
+                              color: post.isLikedByCurrentUser ? Colors.red : Colors.white54,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${post.reactionsCount}',
+                              style: const TextStyle(color: Colors.white54, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      // Comments
+                      Row(
+                        children: [
+                          const Icon(Icons.chat_bubble_outline, color: Colors.white54, size: 18),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${post.commentsCount}',
+                            style: const TextStyle(color: Colors.white54, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  void _togglePostReaction(PostEntity post) {
+    ref.read(feedProvider((
+      communityId: widget.community.id,
+      typeFilter: null,
+    )).notifier).toggleReaction(post.id);
+  }
+
+  void _navigateToDetail(PostEntity post) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ContentDetailScreen(
+          postId: post.id,
+          initialPost: post,
+        ),
+      ),
+    );
+  }
+
+  void _navigateToCreateContent(PostType type) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CreateContentScreen(
+          communityId: widget.community.id,
+          postType: type,
+          communityName: widget.community.title,
+        ),
+      ),
+    );
+  }
+
+  Color _getTypeBadgeColor(PostType type) {
+    switch (type) {
+      case PostType.blog:
+        return const Color(0xFF6366F1);
+      case PostType.wiki:
+        return const Color(0xFF10B981);
+      case PostType.poll:
+        return const Color(0xFFF59E0B);
+      case PostType.quiz:
+        return const Color(0xFFEF4444);
+      case PostType.wallPost:
+        return const Color(0xFF8B5CF6);
+    }
   }
 
   Widget _buildBlogCard({
@@ -860,7 +1209,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                   ),
                   onTap: () {
                     Navigator.pop(context);
-                    // TODO: Navigate to create blog
+                    _navigateToCreateContent(PostType.blog);
                   },
                 ),
                 _buildBentoCard(
@@ -871,7 +1220,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                   ),
                   onTap: () {
                     Navigator.pop(context);
-                    // TODO: Navigate to create poll
+                    _navigateToCreateContent(PostType.poll);
                   },
                 ),
                 _buildBentoCard(
@@ -882,7 +1231,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                   ),
                   onTap: () {
                     Navigator.pop(context);
-                    // TODO: Navigate to create quiz
+                    _navigateToCreateContent(PostType.quiz);
                   },
                 ),
                 _buildBentoCard(
@@ -893,7 +1242,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                   ),
                   onTap: () {
                     Navigator.pop(context);
-                    // TODO: Navigate to create wiki
+                    _navigateToCreateContent(PostType.wiki);
                   },
                 ),
               ],
@@ -1161,39 +1510,36 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
     }
   }
 
-  String _getBlogTitle(int index) {
-    final titles = [
-      'Guía definitiva de RPG',
-      'Top 10 Anime 2024',
-      'Cómo mejorar en PvP',
-      'Review: Nuevo juego',
-      'Teoría del lore',
-      'Fan art showcase',
-      'Builds recomendados',
-      'Easter eggs ocultos',
-      'Speedrun tutorial',
-      'Comunidad highlights',
-      'Eventos próximos',
-      'Discusión semanal',
-    ];
-    return titles[index % titles.length];
+  /// Check if current user is the community owner
+  bool _isOwner() {
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    return currentUserId != null && currentUserId == widget.community.ownerId;
   }
 
-  double _getBlogHeight(int index) {
-    final heights = [150.0, 180.0, 200.0, 160.0, 190.0, 170.0];
-    return heights[index % heights.length];
-  }
-
-  List<Color> _getBlogGradient(int index) {
-    final gradients = [
-      [const Color(0xFFEF4444), const Color(0xFFC026D3)],
-      [const Color(0xFF3B82F6), const Color(0xFF8B5CF6)],
-      [const Color(0xFF10B981), const Color(0xFF059669)],
-      [const Color(0xFFF59E0B), const Color(0xFFEF4444)],
-      [const Color(0xFF8B5CF6), const Color(0xFFEC4899)],
-      [const Color(0xFF06B6D4), const Color(0xFF3B82F6)],
-    ];
-    return gradients[index % gradients.length];
+  /// Navigate to Neo Studio (admin panel)
+  void _navigateToStudio() {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            CommunityStudioScreen(community: widget.community),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0.05, 0),
+                end: Offset.zero,
+              ).animate(CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOutCubic,
+              )),
+              child: child,
+            ),
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
+    );
   }
 }
 

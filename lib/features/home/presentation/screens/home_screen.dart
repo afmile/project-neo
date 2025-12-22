@@ -3,6 +3,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../community/presentation/providers/community_providers.dart';
+import '../../../community/presentation/screens/create_community_screen.dart'; // CommunityWizardScreen
 import '../providers/home_providers.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../features/chat/presentation/screens/global_chats_screen.dart';
@@ -383,7 +385,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildMyCommunities() {
-    final communities = ref.watch(myCommunitiesProvider);
+    // Use real Supabase data via userCommunitiesProvider
+    final communitiesAsync = ref.watch(userCommunitiesProvider);
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -397,26 +400,67 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 'Mis Comunidades',
                 style: NeoTextStyles.headlineMedium,
               ),
-              if (communities.isNotEmpty)
-                TextButton(
-                  onPressed: () {},
-                  child: Text(
-                    'Ver todas',
-                    style: NeoTextStyles.labelMedium.copyWith(
-                      color: NeoColors.accent,
+              // "Ver todas" button - only visible when data is loaded and not empty
+              ...communitiesAsync.whenOrNull(
+                data: (communities) => communities.isNotEmpty ? [
+                  TextButton(
+                    onPressed: () {},
+                    child: Text(
+                      'Ver todas',
+                      style: NeoTextStyles.labelMedium.copyWith(
+                        color: NeoColors.accent,
+                      ),
                     ),
                   ),
-                ),
+                ] : null,
+              ) ?? [],
             ],
           ),
         ),
         const SizedBox(height: NeoSpacing.sm),
         
-        if (communities.isEmpty)
-          _buildEmptyState()
-        else
-          _buildCommunityList(communities),
+        communitiesAsync.when(
+          loading: () => _buildCommunitiesLoading(),
+          error: (error, _) => _buildCommunitiesError(error.toString()),
+          data: (communities) => communities.isEmpty
+              ? _buildEmptyState()
+              : _buildCommunityList(communities),
+        ),
       ],
+    );
+  }
+  
+  Widget _buildCommunitiesLoading() {
+    return SizedBox(
+      height: 180,
+      child: Center(
+        child: CircularProgressIndicator(
+          color: NeoColors.accent,
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildCommunitiesError(String error) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: NeoSpacing.md),
+      padding: const EdgeInsets.all(NeoSpacing.lg),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.red.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.error_outline, color: Colors.red, size: 48),
+          const SizedBox(height: 8),
+          Text(
+            error,
+            style: NeoTextStyles.bodySmall.copyWith(color: Colors.red),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 
@@ -505,7 +549,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               const SizedBox(width: NeoSpacing.md),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () {},
+                  onPressed: () => _navigateToCreateCommunity(),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: NeoColors.accent,
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -869,7 +913,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   color: const Color(0xFF8B5CF6), // Purple
                   onTap: () {
                     Navigator.pop(context);
-                    // TODO: Navigate to create community
+                    _navigateToCreateCommunity();
                   },
                 ),
                 _buildCreationOption(
@@ -947,6 +991,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   void _goToMarket() {
     // TODO: Navigate to NeoCoins market
+  }
+  
+  void _navigateToCreateCommunity() {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            const CommunityWizardScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.1),
+                end: Offset.zero,
+              ).animate(CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOutCubic,
+              )),
+              child: child,
+            ),
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 400),
+      ),
+    );
   }
 
   void _goToCommunity(dynamic communityOrId) {
