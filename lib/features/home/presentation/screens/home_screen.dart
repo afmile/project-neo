@@ -5,11 +5,12 @@ import '../../../../core/theme/neo_theme.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/home_providers.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../features/chat/presentation/screens/chats_screen.dart';
+import '../../../../features/chat/presentation/screens/global_chats_screen.dart';
 import '../../../../features/discovery/presentation/screens/discovery_screen.dart';
 import '../../../../features/profile/presentation/screens/profile_screen.dart';
 import '../widgets/community_card.dart';
 import '../widgets/neo_feed_card.dart';
+import '../../../chat/presentation/widgets/new_chat_modal.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -61,7 +62,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 children: [
                   _buildHomeBody(),           // 0: Home
                   const DiscoveryScreen(),    // 1: Discovery
-                  const ChatsScreen(),        // 2: Chats
+                  const GlobalChatsScreen(),  // 2: Chats
                   const ProfileScreen(),      // 3: Profile
                 ],
               ),
@@ -809,6 +810,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // ═══════════════════════════════════════════════════════════════════════════
 
   void _showCreationOptions() {
+    // If on Chats tab (index 2), show chat creation modal
+    if (_currentNavIndex == 2) {
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        builder: (context) => const NewChatModal(),
+      );
+      return;
+    }
+
+    // Otherwise, show community creation options
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,

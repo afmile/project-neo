@@ -73,6 +73,9 @@ class UserEntity extends Equatable {
     return vipExpiry!.isAfter(DateTime.now());
   }
   
+  /// Alias for chat pinning logic (NeoVip = active VIP)
+  bool get isNeoVip => isVipActive;
+  
   /// Create a copy with modified fields
   UserEntity copyWith({
     String? id,

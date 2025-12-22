@@ -11,6 +11,8 @@ import '../../../community/domain/entities/community_entity.dart';
 import '../../../home/presentation/providers/home_providers.dart';
 import '../widgets/facepile_widget.dart';
 import '../widgets/live_indicator_widget.dart';
+import '../../../chat/presentation/screens/community_chats_screen.dart';
+import '../../../chat/presentation/widgets/chat_catalog_grid.dart';
 
 class CommunityHomeScreen extends ConsumerStatefulWidget {
   final CommunityEntity community;
@@ -47,7 +49,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     isMember = !widget.isGuest;
   }
 
@@ -63,7 +65,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
     return Scaffold(
       backgroundColor: Colors.black,
       body: _buildBody(),
-      floatingActionButton: isMember && _currentNavIndex == 0
+      floatingActionButton: isMember
           ? _buildCentralFAB()
           : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
@@ -426,9 +428,11 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
             fontWeight: FontWeight.bold,
           ),
           unselectedLabelStyle: NeoTextStyles.labelLarge,
+          dividerColor: Colors.transparent, // Remove white separator line
           tabs: const [
             Tab(text: 'Destacados'),
             Tab(text: 'Blogs'),
+            Tab(text: 'Chats'),
             Tab(text: 'Wikis'),
           ],
         ),
@@ -442,6 +446,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
       children: [
         _buildDestacadosTab(),
         _buildBlogsTab(),
+        ChatCatalogGrid(communityId: widget.community.id),
         _buildWikisTab(),
       ],
     );
@@ -642,285 +647,8 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildChatsView() {
-    // Dummy chat data with live status
-    final chats = List.generate(8, (index) {
-      return {
-        'name': 'Chat ${_getChatName(index)}',
-        'lastMessage': _getChatLastMessage(index),
-        'wallpaper': _getChatWallpaper(index),
-        'hasAudio': index % 3 == 0, // Every 3rd has audio
-        'hasVideo': index % 4 == 0, // Every 4th has video
-      };
-    });
-
-    return CustomScrollView(
-      slivers: [
-        SliverAppBar(
-          pinned: true,
-          backgroundColor: const Color(0xFF1A1A1A),
-          title: const Text('Chats'),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => setState(() => _currentNavIndex = 0),
-          ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.all(12),
-          sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 0.85,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-            ),
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final chat = chats[index];
-                return _buildChatCard(
-                  name: chat['name'] as String,
-                  lastMessage: chat['lastMessage'] as String,
-                  wallpaper: chat['wallpaper'] as List<Color>,
-                  hasAudio: chat['hasAudio'] as bool,
-                  hasVideo: chat['hasVideo'] as bool,
-                );
-              },
-              childCount: chats.length,
-            ),
-          ),
-        ),
-        const SliverToBoxAdapter(child: SizedBox(height: 80)),
-      ],
-    );
+    return CommunityChatsScreen(communityId: widget.community.id);
   }
-
-  Widget _buildChatCard({
-    required String name,
-    required String lastMessage,
-    required List<Color> wallpaper,
-    required bool hasAudio,
-    required bool hasVideo,
-  }) {
-    // Determine border color based on live status
-    Color? borderColor;
-    IconData? statusIcon;
-    
-    if (hasVideo) {
-      borderColor = const Color(0xFFEF4444); // Red neon
-      statusIcon = Icons.fiber_manual_record; // REC icon
-    } else if (hasAudio) {
-      borderColor = const Color(0xFF10B981); // Green neon
-      statusIcon = Icons.volume_up;
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Stack(
-          children: [
-            // Wallpaper background (darkened)
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: wallpaper,
-                  ),
-                ),
-              ),
-            ),
-
-            // Dark overlay
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.4),
-                      Colors.black.withValues(alpha: 0.7),
-                      Colors.black.withValues(alpha: 0.9),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // Content
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Logo with live status border
-                  Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: borderColor != null
-                          ? Border.all(
-                              color: borderColor,
-                              width: 3,
-                            )
-                          : null,
-                      boxShadow: borderColor != null
-                          ? [
-                              BoxShadow(
-                                color: borderColor.withValues(alpha: 0.6),
-                                blurRadius: 12,
-                                spreadRadius: 2,
-                              ),
-                            ]
-                          : null,
-                    ),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: NeoColors.card,
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.1),
-                          width: 2,
-                        ),
-                      ),
-                      child: const Icon(
-                        Icons.chat_bubble_rounded,
-                        color: NeoColors.accent,
-                        size: 28,
-                      ),
-                    ),
-                  ),
-
-                  // Status icon (if live)
-                  if (statusIcon != null) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: borderColor!.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: borderColor,
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            statusIcon,
-                            color: borderColor,
-                            size: 14,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            hasVideo ? 'LIVE' : 'AUDIO',
-                            style: TextStyle(
-                              color: borderColor,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-
-                  const Spacer(),
-
-                  // Footer: Name and last message
-                  Text(
-                    name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      height: 1.2,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    lastMessage,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.7),
-                      fontSize: 12,
-                      height: 1.3,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _getChatName(int index) {
-    final names = [
-      'General',
-      'Anime Lovers',
-      'Gaming Zone',
-      'Off-Topic',
-      'Cine Club',
-      'Arte y Diseño',
-      'Música',
-      'Memes',
-    ];
-    return names[index % names.length];
-  }
-
-  String _getChatLastMessage(int index) {
-    final messages = [
-      'Hola a todos! Cómo están?',
-      'Alguien vio el último episodio?',
-      'GG! Buena partida',
-      'jajaja ese meme está buenísimo',
-      'Vamos a ver la película en 10 min',
-      'Increíble ese fan art!',
-      '🎵 Escuchando lo nuevo de...',
-      'JAJAJAJA no puede ser',
-    ];
-    return messages[index % messages.length];
-  }
-
-  List<Color> _getChatWallpaper(int index) {
-    final wallpapers = [
-      [const Color(0xFF1E3A8A), const Color(0xFF3B82F6)], // Blue
-      [const Color(0xFF7C2D12), const Color(0xFFEF4444)], // Red
-      [const Color(0xFF065F46), const Color(0xFF10B981)], // Green
-      [const Color(0xFF7C2D12), const Color(0xFFF59E0B)], // Orange
-      [const Color(0xFF581C87), const Color(0xFF8B5CF6)], // Purple
-      [const Color(0xFF831843), const Color(0xFFEC4899)], // Pink
-      [const Color(0xFF164E63), const Color(0xFF06B6D4)], // Cyan
-      [const Color(0xFF713F12), const Color(0xFFFBBF24)], // Yellow
-    ];
-    return wallpapers[index % wallpapers.length];
-  }
-
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PERFIL VIEW - INDEX 4
-  // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildPerfilView() {
     return CustomScrollView(
@@ -1087,7 +815,16 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: _showCreationOptions,
+          onTap: () {
+            // Context-aware FAB logic
+            if (_currentNavIndex == 3) {
+              // Chats tab
+              _showChatCreateModal();
+            } else {
+              // Inicio, Miembros, Perfil tabs
+              _showGeneralCreateModal();
+            }
+          },
           customBorder: const CircleBorder(),
           child: const Icon(Icons.add, color: Colors.white, size: 32),
         ),
@@ -1095,29 +832,101 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
     );
   }
 
-  void _showCreationOptions() {
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // GENERAL CREATE MODAL (BENTO GRID)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  void _showGeneralCreateModal() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: NeoColors.card,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Title
             Text(
               'Crear Contenido',
-              style: NeoTextStyles.headlineSmall.copyWith(
+              style: NeoTextStyles.headlineMedium.copyWith(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 24),
-            _buildCreationOption(Icons.article, 'Nuevo Blog', () {}),
-            _buildCreationOption(Icons.poll, 'Nueva Encuesta', () {}),
-            _buildCreationOption(Icons.quiz, 'Nuevo Quiz', () {}),
+
+            // Bento Grid - 2 columns
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 16,
+              crossAxisSpacing: 16,
+              childAspectRatio: 1.1,
+              children: [
+                _buildBentoCard(
+                  icon: Icons.article_outlined,
+                  label: 'Blog',
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF8B5CF6), Color(0xFF6D28D9)],
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    // TODO: Navigate to create blog
+                  },
+                ),
+                _buildBentoCard(
+                  icon: Icons.poll_outlined,
+                  label: 'Encuesta',
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFEC4899), Color(0xFFDB2777)],
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    // TODO: Navigate to create poll
+                  },
+                ),
+                _buildBentoCard(
+                  icon: Icons.quiz_outlined,
+                  label: 'Quiz',
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    // TODO: Navigate to create quiz
+                  },
+                ),
+                _buildBentoCard(
+                  icon: Icons.menu_book_outlined,
+                  label: 'Wiki',
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF10B981), Color(0xFF059669)],
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    // TODO: Navigate to create wiki
+                  },
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
           ],
         ),
@@ -1125,23 +934,169 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
     );
   }
 
-  Widget _buildCreationOption(IconData icon, String label, VoidCallback onTap) {
-    return ListTile(
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: NeoColors.accent.withValues(alpha: 0.2),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(icon, color: NeoColors.accent),
-      ),
-      title: Text(
-        label,
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-      ),
+  Widget _buildBentoCard({
+    required IconData icon,
+    required String label,
+    required Gradient gradient,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: gradient,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 48,
+              color: Colors.white,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              label,
+              style: NeoTextStyles.bodyLarge.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CHAT CREATE MODAL
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  void _showChatCreateModal() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Title
+            Text(
+              'Crear Chat',
+              style: NeoTextStyles.headlineMedium.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Private Room Card
+            InkWell(
+              onTap: () {
+                Navigator.pop(context);
+                // TODO: Navigate to CreatePrivateRoomScreen
+                Navigator.pushNamed(
+                  context,
+                  '/create-private-room',
+                  arguments: widget.community.id,
+                );
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF8B5CF6), Color(0xFFEC4899)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.lock_outline,
+                        size: 32,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Sala Privada',
+                            style: NeoTextStyles.headlineSmall.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Crea un grupo con tus amigos',
+                            style: NeoTextStyles.bodyMedium.copyWith(
+                              color: Colors.white.withValues(alpha: 0.8),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(
+                      Icons.arrow_forward_ios,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
 
   // ═══════════════════════════════════════════════════════════════════════════
   // JOIN BAR (FOR GUESTS)
