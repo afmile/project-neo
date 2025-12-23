@@ -116,11 +116,26 @@ class ProfileScreen extends ConsumerWidget {
                         width: 3,
                       ),
                     ),
-                    child: const Icon(
-                      Icons.person_rounded,
-                      color: NeoColors.accent,
-                      size: 48,
-                    ),
+                    child: user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty
+                        ? ClipOval(
+                            child: Image.network(
+                              user.avatarUrl!,
+                              fit: BoxFit.cover,
+                              width: 100,
+                              height: 100,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  const Icon(
+                                Icons.person_rounded,
+                                color: NeoColors.accent,
+                                size: 48,
+                              ),
+                            ),
+                          )
+                        : const Icon(
+                            Icons.person_rounded,
+                            color: NeoColors.accent,
+                            size: 48,
+                          ),
                   ),
                   
                   const SizedBox(height: NeoSpacing.md),
@@ -138,7 +153,7 @@ class ProfileScreen extends ConsumerWidget {
                   
                   // Bio
                   Text(
-                    'Amante de la tecnología y las comunidades',
+                    user?.bio ?? 'Sin descripción',
                     style: NeoTextStyles.bodyMedium.copyWith(
                       color: NeoColors.textSecondary,
                     ),
@@ -215,19 +230,19 @@ class ProfileScreen extends ConsumerWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildStatItem('Seguidores', '234'),
+          _buildStatItem('Seguidores', '0'),
           Container(
             width: 1,
             height: 40,
             color: NeoColors.border,
           ),
-          _buildStatItem('Siguiendo', '156'),
+          _buildStatItem('Siguiendo', '0'),
           Container(
             width: 1,
             height: 40,
             color: NeoColors.border,
           ),
-          _buildStatItem('Reputación', '1.2K'),
+          _buildStatItem('Reputación', '0'),
         ],
       ),
     );

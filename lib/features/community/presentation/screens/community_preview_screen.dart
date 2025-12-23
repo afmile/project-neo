@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../domain/entities/community_entity.dart';
 import '../utils/category_utils.dart';
+import '../providers/community_providers.dart';
 
 class CommunityPreviewScreen extends ConsumerStatefulWidget {
   final CommunityEntity community;
@@ -448,7 +449,7 @@ class _CommunityPreviewScreenState
                   icon: Icons.waving_hand,
                   iconColor: const Color(0xFFFBBF24),
                   title: '¡Bienvenido!',
-                  content:
+                  content: widget.community.description ??
                       'Nos alegra que estés interesado en unirte a nuestra comunidad. Aquí encontrarás un espacio para compartir, aprender y conectar con personas que comparten tus intereses.',
                 ),
                 const SizedBox(height: 20),
@@ -733,12 +734,74 @@ class _CommunityPreviewScreenState
   // ACTIONS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  void _joinCommunity() {
-    // Navigate to community home as member
-    context.push('/community_home', extra: {
-      'community': widget.community,
-      'isGuest': false,
+  void _joinCommunity() async {
+    // Show loading state
+    setState(() {
+      _isAccessCodeValid = false; // Disable button during loading
     });
+
+    // Call repository to join community
+    final success = await ref
+        .read(communityActionsProvider.notifier)
+        .joinCommunity(widget.community.id);
+
+    if (!mounted) return;
+
+    if (success) {
+      // Invalidate community details to refresh member count
+      ref.invalidate(communityByIdProvider(widget.community.id));
+      
+      // Show welcome message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '¡Bienvenido a ${widget.community.title}!',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF10B981), // Green
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      
+      // Navigate to community home as member (use go() to replace current route)
+      context.go('/community_home', extra: widget.community);
+    } else {
+      // Re-enable button and show error
+      setState(() {
+        _isAccessCodeValid = !widget.community.isPrivate;
+      });
+
+      // Show error message
+      final errorState = ref.read(communityActionsProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  errorState.error ?? 'Error al unirse a la comunidad. Intenta de nuevo.',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
   }
 
   void _enterAsGuest() {

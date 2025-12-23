@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/entities/community_chat_room_entity.dart';
 import '../../data/models/community_chat_room_model.dart';
+import '../../data/repositories/chat_channel_repository.dart';
 
 /// State for community chat rooms
 class CommunityChatRoomState {
@@ -22,317 +24,78 @@ class CommunityChatRoomState {
     return CommunityChatRoomState(
       rooms: rooms ?? this.rooms,
       isLoading: isLoading ?? this.isLoading,
-      error: error ?? this.error,
+      error: error,
     );
   }
 }
 
-/// Notifier for community chat rooms
+/// Notifier for community chat rooms - NOW USING SUPABASE
 class CommunityChatRoomNotifier extends StateNotifier<CommunityChatRoomState> {
   final String communityId;
+  final ChatChannelRepository _repository;
 
-  CommunityChatRoomNotifier(this.communityId)
-      : super(const CommunityChatRoomState()) {
-    _loadMockRooms();
+  CommunityChatRoomNotifier(this.communityId, {ChatChannelRepository? repository})
+      : _repository = repository ?? ChatChannelRepository(),
+        super(const CommunityChatRoomState()) {
+    _loadRoomsFromSupabase();
   }
 
-  void _loadMockRooms() {
-    state = state.copyWith(isLoading: true);
+  /// Load rooms from Supabase (replaces _loadMockRooms)
+  Future<void> _loadRoomsFromSupabase() async {
+    state = state.copyWith(isLoading: true, error: null);
 
-    Future.delayed(const Duration(milliseconds: 500), () {
-      final mockRooms = _generateMockRooms();
+    try {
+      final rooms = await _repository.fetchChannels(communityId);
       state = state.copyWith(
-        rooms: mockRooms,
+        rooms: rooms,
         isLoading: false,
       );
-    });
+    } catch (e) {
+      state = state.copyWith(
+        error: 'Error al cargar salas: ${e.toString()}',
+        isLoading: false,
+      );
+    }
   }
 
-  List<CommunityChatRoomEntity> _generateMockRooms() {
-    final now = DateTime.now();
+  /// Create a new chat channel
+  Future<bool> createChannel({
+    required String title,
+    String? description,
+    String? iconUrl,
+    String? backgroundImageUrl,
+    bool voiceEnabled = false,
+    bool videoEnabled = false,
+    bool projectionEnabled = false,
+  }) async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) {
+      state = state.copyWith(error: 'No hay usuario autenticado');
+      return false;
+    }
 
-    return [
-      // Pinned room 1
-      CommunityChatRoomModel(
-        id: 'room_1',
+    try {
+      final newRoom = await _repository.createChannel(
         communityId: communityId,
-        type: RoomType.public,
-        title: 'Sala General',
-        description: 'Chat general de la comunidad',
-        memberCount: 1234,
-        lastMessage: RoomMessageModel(
-          id: 'msg_1',
-          senderId: 'user_1',
-          senderName: 'María',
-          content: '¡Hola a todos!',
-          timestamp: now.subtract(const Duration(minutes: 5)),
-          isRead: false,
-        ),
-        lastMessageTime: now.subtract(const Duration(minutes: 5)),
-        lastUserActivity: now.subtract(const Duration(minutes: 5)),
-        unreadCount: 5,
-        isPinned: true,
-        pinnedOrder: 0,
-        isFavorite: true,
-      ),
+        creatorId: userId,
+        title: title,
+        description: description,
+        iconUrl: iconUrl,
+        backgroundImageUrl: backgroundImageUrl,
+        voiceEnabled: voiceEnabled,
+        videoEnabled: videoEnabled,
+        projectionEnabled: projectionEnabled,
+      );
 
-      // Pinned room 2
-      CommunityChatRoomModel(
-        id: 'room_2',
-        communityId: communityId,
-        type: RoomType.public,
-        title: 'Roleplay',
-        description: 'Sala de roleplay',
-        memberCount: 567,
-        lastMessage: RoomMessageModel(
-          id: 'msg_2',
-          senderId: 'user_2',
-          senderName: 'Carlos',
-          content: '*Se acerca lentamente*',
-          timestamp: now.subtract(const Duration(hours: 1)),
-          isRead: true,
-        ),
-        lastMessageTime: now.subtract(const Duration(hours: 1)),
-        lastUserActivity: now.subtract(const Duration(hours: 2)),
-        unreadCount: 2,
-        isPinned: true,
-        pinnedOrder: 1,
-        isFavorite: false,
-      ),
-
-      // Pinned room 3
-      CommunityChatRoomModel(
-        id: 'room_3',
-        communityId: communityId,
-        type: RoomType.public,
-        title: 'Arte y Creatividad',
-        description: 'Comparte tus creaciones',
-        memberCount: 890,
-        lastMessage: RoomMessageModel(
-          id: 'msg_3',
-          senderId: 'user_3',
-          senderName: 'Ana',
-          content: 'Miren mi nuevo dibujo!',
-          timestamp: now.subtract(const Duration(hours: 3)),
-          isRead: true,
-        ),
-        lastMessageTime: now.subtract(const Duration(hours: 3)),
-        lastUserActivity: now.subtract(const Duration(days: 1)),
-        unreadCount: 0,
-        isPinned: true,
-        pinnedOrder: 2,
-        isFavorite: false,
-      ),
-
-      // Pinned room 4
-      CommunityChatRoomModel(
-        id: 'room_8',
-        communityId: communityId,
-        type: RoomType.public,
-        title: 'Música y Podcasts',
-        description: 'Comparte tu música favorita',
-        memberCount: 678,
-        lastMessage: RoomMessageModel(
-          id: 'msg_8',
-          senderId: 'user_8',
-          senderName: 'Pedro',
-          content: '🎵 Escuchen esta canción!',
-          timestamp: now.subtract(const Duration(minutes: 45)),
-          isRead: false,
-        ),
-        lastMessageTime: now.subtract(const Duration(minutes: 45)),
-        lastUserActivity: now.subtract(const Duration(hours: 1)),
-        unreadCount: 8,
-        isPinned: true,
-        pinnedOrder: 3,
-        isFavorite: true,
-      ),
-
-      // Pinned room 5
-      CommunityChatRoomModel(
-        id: 'room_9',
-        communityId: communityId,
-        type: RoomType.public,
-        title: 'Gaming Zone',
-        description: 'Para los gamers de la comunidad',
-        memberCount: 1456,
-        lastMessage: RoomMessageModel(
-          id: 'msg_9',
-          senderId: 'user_9',
-          senderName: 'Alex',
-          content: 'Alguien para jugar?',
-          timestamp: now.subtract(const Duration(minutes: 15)),
-          isRead: false,
-        ),
-        lastMessageTime: now.subtract(const Duration(minutes: 15)),
-        lastUserActivity: now.subtract(const Duration(minutes: 15)),
-        unreadCount: 12,
-        isPinned: true,
-        pinnedOrder: 4,
-        isFavorite: false,
-      ),
-
-      // Unpinned room 1 (recent user activity)
-      CommunityChatRoomModel(
-        id: 'room_4',
-        communityId: communityId,
-        type: RoomType.public,
-        title: 'Dudas y Soporte',
-        description: 'Ayuda de la comunidad',
-        memberCount: 456,
-        lastMessage: RoomMessageModel(
-          id: 'msg_4',
-          senderId: 'user_4',
-          senderName: 'Luis',
-          content: '¿Alguien sabe cómo...?',
-          timestamp: now.subtract(const Duration(minutes: 30)),
-          isRead: false,
-        ),
-        lastMessageTime: now.subtract(const Duration(minutes: 30)),
-        lastUserActivity: now.subtract(const Duration(minutes: 30)),
-        unreadCount: 3,
-        isPinned: false,
-        isFavorite: false,
-      ),
-
-      // Unpinned room 2
-      CommunityChatRoomModel(
-        id: 'room_5',
-        communityId: communityId,
-        type: RoomType.public,
-        title: 'Off-Topic',
-        description: 'Conversación libre',
-        memberCount: 789,
-        lastMessage: RoomMessageModel(
-          id: 'msg_5',
-          senderId: 'user_5',
-          senderName: 'Sofia',
-          content: 'Jajaja',
-          timestamp: now.subtract(const Duration(hours: 2)),
-          isRead: true,
-        ),
-        lastMessageTime: now.subtract(const Duration(hours: 2)),
-        lastUserActivity: now.subtract(const Duration(hours: 4)),
-        unreadCount: 0,
-        isPinned: false,
-        isFavorite: false,
-      ),
-
-      // Unpinned room 3 (private)
-      CommunityChatRoomModel(
-        id: 'room_6',
-        communityId: communityId,
-        type: RoomType.private,
-        title: 'Equipo de Moderación',
-        description: 'Chat privado de mods',
-        memberCount: 5,
-        lastMessage: RoomMessageModel(
-          id: 'msg_6',
-          senderId: 'mod_1',
-          senderName: 'Moderador',
-          content: 'Revisemos los reportes.',
-          timestamp: now.subtract(const Duration(hours: 6)),
-          isRead: true,
-        ),
-        lastMessageTime: now.subtract(const Duration(hours: 6)),
-        lastUserActivity: now.subtract(const Duration(days: 2)),
-        unreadCount: 0,
-        isPinned: false,
-        isFavorite: false,
-      ),
-
-      // Unpinned room 4
-      CommunityChatRoomModel(
-        id: 'room_7',
-        communityId: communityId,
-        type: RoomType.public,
-        title: 'Eventos',
-        description: 'Organización de eventos',
-        memberCount: 234,
-        lastMessage: RoomMessageModel(
-          id: 'msg_7',
-          senderId: 'user_7',
-          senderName: 'Diego',
-          content: 'El evento es el sábado!',
-          timestamp: now.subtract(const Duration(days: 1)),
-          isRead: true,
-        ),
-        lastMessageTime: now.subtract(const Duration(days: 1)),
-        lastUserActivity: now.subtract(const Duration(days: 3)),
-        unreadCount: 0,
-        isPinned: false,
-        isFavorite: false,
-      ),
-
-      // Unpinned room 5
-      CommunityChatRoomModel(
-        id: 'room_10',
-        communityId: communityId,
-        type: RoomType.public,
-        title: 'Memes y Humor',
-        description: 'Comparte memes divertidos',
-        memberCount: 2345,
-        lastMessage: RoomMessageModel(
-          id: 'msg_10',
-          senderId: 'user_10',
-          senderName: 'Laura',
-          content: '😂😂😂',
-          timestamp: now.subtract(const Duration(hours: 5)),
-          isRead: true,
-        ),
-        lastMessageTime: now.subtract(const Duration(hours: 5)),
-        lastUserActivity: now.subtract(const Duration(hours: 8)),
-        unreadCount: 0,
-        isPinned: false,
-        isFavorite: false,
-      ),
-
-      // Unpinned room 6
-      CommunityChatRoomModel(
-        id: 'room_11',
-        communityId: communityId,
-        type: RoomType.public,
-        title: 'Deportes',
-        description: 'Hablemos de deportes',
-        memberCount: 567,
-        lastMessage: RoomMessageModel(
-          id: 'msg_11',
-          senderId: 'user_11',
-          senderName: 'Roberto',
-          content: 'Qué partidazo!',
-          timestamp: now.subtract(const Duration(hours: 12)),
-          isRead: true,
-        ),
-        lastMessageTime: now.subtract(const Duration(hours: 12)),
-        lastUserActivity: now.subtract(const Duration(days: 1)),
-        unreadCount: 0,
-        isPinned: false,
-        isFavorite: false,
-      ),
-
-      // Unpinned room 7
-      CommunityChatRoomModel(
-        id: 'room_12',
-        communityId: communityId,
-        type: RoomType.public,
-        title: 'Cine y Series',
-        description: 'Recomendaciones y spoilers',
-        memberCount: 1123,
-        lastMessage: RoomMessageModel(
-          id: 'msg_12',
-          senderId: 'user_12',
-          senderName: 'Camila',
-          content: 'Vieron el último episodio?',
-          timestamp: now.subtract(const Duration(days: 2)),
-          isRead: true,
-        ),
-        lastMessageTime: now.subtract(const Duration(days: 2)),
-        lastUserActivity: now.subtract(const Duration(days: 4)),
-        unreadCount: 0,
-        isPinned: false,
-        isFavorite: false,
-      ),
-    ];
+      // Add the new room to the list
+      state = state.copyWith(
+        rooms: [newRoom, ...state.rooms],
+      );
+      return true;
+    } catch (e) {
+      state = state.copyWith(error: 'Error al crear sala: ${e.toString()}');
+      return false;
+    }
   }
 
   // Get pinned rooms sorted by pinnedOrder
@@ -357,24 +120,36 @@ class CommunityChatRoomNotifier extends StateNotifier<CommunityChatRoomState> {
     return unpinned;
   }
 
-  void togglePin(String roomId) {
-    final rooms = state.rooms.map((room) {
-      if (room.id == roomId) {
-        if (room.isPinned) {
-          // Unpin
-          return room.copyWith(isPinned: false, pinnedOrder: null);
-        } else {
-          // Pin - assign next order
-          final maxOrder = getPinnedRooms()
-              .map((r) => r.pinnedOrder ?? -1)
-              .fold(-1, (max, order) => order > max ? order : max);
-          return room.copyWith(isPinned: true, pinnedOrder: maxOrder + 1);
-        }
+  void togglePin(String roomId) async {
+    final room = state.rooms.firstWhere((r) => r.id == roomId);
+    final newPinned = !room.isPinned;
+    int? newOrder;
+    
+    if (newPinned) {
+      // Assign next order
+      final maxOrder = getPinnedRooms()
+          .map((r) => r.pinnedOrder ?? -1)
+          .fold(-1, (max, order) => order > max ? order : max);
+      newOrder = maxOrder + 1;
+    }
+
+    // Update locally first for immediate feedback
+    final rooms = state.rooms.map((r) {
+      if (r.id == roomId) {
+        return r.copyWith(isPinned: newPinned, pinnedOrder: newOrder);
       }
-      return room;
+      return r;
     }).toList();
 
     state = state.copyWith(rooms: rooms);
+
+    // Then update in Supabase
+    try {
+      await _repository.togglePin(roomId, newPinned, newOrder);
+    } catch (e) {
+      // Revert on error
+      _loadRoomsFromSupabase();
+    }
   }
 
   void reorderPinned(int oldIndex, int newIndex) {
@@ -382,9 +157,9 @@ class CommunityChatRoomNotifier extends StateNotifier<CommunityChatRoomState> {
     if (oldIndex < 0 || oldIndex >= pinned.length) return;
     if (newIndex < 0 || newIndex >= pinned.length) return;
 
-    // CRITICAL FIX: Adjust newIndex when moving forward
+    // Adjust newIndex when moving forward
     if (oldIndex < newIndex) {
-      newIndex -= 1; // Account for removal of original item
+      newIndex -= 1;
     }
 
     final item = pinned.removeAt(oldIndex);
@@ -414,7 +189,7 @@ class CommunityChatRoomNotifier extends StateNotifier<CommunityChatRoomState> {
   }
 
   void refreshRooms() {
-    _loadMockRooms();
+    _loadRoomsFromSupabase();
   }
 }
 

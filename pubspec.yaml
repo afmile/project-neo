@@ -46,6 +46,7 @@ dependencies:
   flutter_slidable: ^4.0.3
   timeago: ^3.7.0
   image_picker: ^1.2.1
+  cached_network_image: ^3.4.1
 
 dev_dependencies:
   flutter_test:

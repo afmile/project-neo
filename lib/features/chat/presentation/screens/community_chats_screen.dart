@@ -5,6 +5,8 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/community_chat_room_provider.dart';
 import '../widgets/pinned_room_card.dart';
 import '../widgets/community_room_tile.dart';
+import 'create_chat_screen.dart';
+import 'chat_room_screen.dart';
 
 class CommunityChatsScreen extends ConsumerStatefulWidget {
   final String communityId;
@@ -31,6 +33,19 @@ class _CommunityChatsScreenState extends ConsumerState<CommunityChatsScreen> {
     super.dispose();
   }
 
+  void _navigateToCreateChat() async {
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => CreateChatScreen(communityId: widget.communityId),
+      ),
+    );
+    
+    // Refresh if a chat was created
+    if (result == true) {
+      ref.read(communityChatRoomProvider(widget.communityId).notifier).refreshRooms();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final roomState = ref.watch(communityChatRoomProvider(widget.communityId));
@@ -53,9 +68,13 @@ class _CommunityChatsScreenState extends ConsumerState<CommunityChatsScreen> {
     // Check if user is NeoVip
     final user = ref.watch(currentUserProvider);
     final isNeoVip = user?.isNeoVip ?? false;
+    
+    // Check if completely empty (no rooms at all)
+    final isCompletelyEmpty = roomState.rooms.isEmpty && !roomState.isLoading;
 
     return Scaffold(
       backgroundColor: Colors.black,
+      // FAB removed - accessed via central navbar button
       body: GestureDetector(
         onTap: () {
           // Close search when tapping outside
@@ -72,7 +91,11 @@ class _CommunityChatsScreenState extends ConsumerState<CommunityChatsScreen> {
             ? const Center(
                 child: CircularProgressIndicator(color: NeoColors.accent),
               )
-            : Column(
+            : roomState.error != null
+                ? _buildErrorState(roomState.error!)
+                : isCompletelyEmpty
+                    ? _buildCompletelyEmptyState()
+                    : Column(
                 children: [
                   // Header
                   _buildHeader(context),
@@ -130,7 +153,7 @@ class _CommunityChatsScreenState extends ConsumerState<CommunityChatsScreen> {
 
                           SliverPadding(
                             padding: const EdgeInsets.all(NeoSpacing.md),
-                            sliver: unpinnedRooms.isEmpty
+                            sliver: unpinnedRooms.isEmpty && pinnedRooms.isEmpty
                                 ? SliverToBoxAdapter(
                                     child: _buildEmptyUnpinnedState(),
                                   )
@@ -146,7 +169,11 @@ class _CommunityChatsScreenState extends ConsumerState<CommunityChatsScreen> {
                                             room: room,
                                             communityId: widget.communityId,
                                             onTap: () {
-                                              // TODO: Navigate to room conversation
+                                              Navigator.of(context).push(
+                                                MaterialPageRoute(
+                                                  builder: (_) => ChatRoomScreen(room: room),
+                                                ),
+                                              );
                                             },
                                           ),
                                         );
@@ -155,12 +182,135 @@ class _CommunityChatsScreenState extends ConsumerState<CommunityChatsScreen> {
                                     ),
                                   ),
                           ),
+                          
+                          // Bottom padding for FAB
+                          const SliverToBoxAdapter(
+                            child: SizedBox(height: 80),
+                          ),
                         ],
                       ),
                     ),
                   ),
                 ],
               ),
+        ),
+      ),
+    );
+  }
+
+  /// Empty state when there are NO chats at all
+  Widget _buildCompletelyEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(NeoSpacing.xl),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Animated icon container
+            Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    NeoColors.accent.withOpacity(0.2),
+                    NeoColors.accent.withOpacity(0.1),
+                  ],
+                ),
+              ),
+              child: Icon(
+                Icons.chat_bubble_outline_rounded,
+                size: 56,
+                color: NeoColors.accent.withOpacity(0.7),
+              ),
+            ),
+            const SizedBox(height: NeoSpacing.xl),
+            Text(
+              'No hay salas de chat activas',
+              style: NeoTextStyles.headlineSmall.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: NeoSpacing.sm),
+            Text(
+              '¡Sé el primero en crear una sala y\ncomenzar la conversación!',
+              style: NeoTextStyles.bodyMedium.copyWith(
+                color: NeoColors.textSecondary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: NeoSpacing.xl),
+            ElevatedButton.icon(
+              onPressed: _navigateToCreateChat,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: NeoColors.accent,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+              ),
+              icon: const Icon(Icons.add),
+              label: const Text(
+                'Crear primera sala',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Error state
+  Widget _buildErrorState(String error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(NeoSpacing.xl),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 64,
+              color: Colors.red.withOpacity(0.7),
+            ),
+            const SizedBox(height: NeoSpacing.md),
+            Text(
+              'Error al cargar salas',
+              style: NeoTextStyles.headlineSmall.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: NeoSpacing.sm),
+            Text(
+              error,
+              style: NeoTextStyles.bodyMedium.copyWith(
+                color: NeoColors.textSecondary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: NeoSpacing.lg),
+            ElevatedButton.icon(
+              onPressed: () {
+                ref.read(communityChatRoomProvider(widget.communityId).notifier).refreshRooms();
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reintentar'),
+            ),
+          ],
         ),
       ),
     );
@@ -176,7 +326,7 @@ class _CommunityChatsScreenState extends ConsumerState<CommunityChatsScreen> {
         color: Colors.grey[900],
         border: Border(
           bottom: BorderSide(
-            color: Colors.white.withValues(alpha: 0.1),
+            color: Colors.white.withOpacity(0.1),
             width: 1,
           ),
         ),
@@ -388,7 +538,7 @@ class _CommunityChatsScreenState extends ConsumerState<CommunityChatsScreen> {
     List displayRooms,
   ) {
     return SizedBox(
-      height: 135, // Increased from 120 to prevent overflow when dragging
+      height: 135,
       child: ReorderableListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: displayRooms.length,
@@ -528,7 +678,7 @@ class _CommunityChatsScreenState extends ConsumerState<CommunityChatsScreen> {
             Icon(
               Icons.chat_bubble_outline_rounded,
               size: 64,
-              color: Colors.white.withValues(alpha: 0.3),
+              color: Colors.white.withOpacity(0.3),
             ),
             const SizedBox(height: NeoSpacing.md),
             Text(

@@ -15,6 +15,7 @@ import '../widgets/facepile_widget.dart';
 import '../widgets/live_indicator_widget.dart';
 import '../../../chat/presentation/screens/community_chats_screen.dart';
 import '../../../chat/presentation/widgets/chat_catalog_grid.dart';
+import '../../../chat/presentation/screens/create_chat_screen.dart';
 import 'community_user_profile_screen.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import 'community_friends_tab.dart';
@@ -1136,14 +1137,8 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
         color: Colors.transparent,
         child: InkWell(
           onTap: () {
-            // Context-aware FAB logic
-            if (_currentNavIndex == 3) {
-              // Chats tab
-              _showChatCreateModal();
-            } else {
-              // Inicio, Amig@s, Perfil tabs
-              _showGeneralCreateModal();
-            }
+            // Always show general create modal which now includes Chat
+            _showGeneralCreateModal();
           },
           customBorder: const CircleBorder(),
           child: const Icon(Icons.add, color: Colors.white, size: 32),
@@ -1201,6 +1196,21 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
               crossAxisSpacing: 16,
               childAspectRatio: 1.1,
               children: [
+                _buildBentoCard(
+                  icon: Icons.chat_bubble_outline,
+                  label: 'Sala de Chat',
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF8B5CF6), Color(0xFFEC4899)],
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => CreateChatScreen(communityId: widget.community.id),
+                      ),
+                    );
+                  },
+                ),
                 _buildBentoCard(
                   icon: Icons.article_outlined,
                   label: 'Blog',

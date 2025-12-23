@@ -10,9 +10,13 @@ enum RoomType {
 class CommunityChatRoomEntity extends Equatable {
   final String id;
   final String communityId;
+  final String? creatorId; // ID of user who created the room
+  final String? creatorAvatarUrl; // Creator's avatar URL
   final RoomType type;
   final String title;
   final String? description;
+  final String? iconUrl; // Room icon (1:1 square)
+  final String? backgroundImageUrl; // Background image (portrait)
   final int memberCount;
   final RoomMessage? lastMessage;
   final DateTime lastMessageTime;
@@ -22,13 +26,22 @@ class CommunityChatRoomEntity extends Equatable {
   final int? pinnedOrder; // Order in pinned section (0-based)
   final bool isFavorite;  // Shown in global inbox
   final String? avatarUrl;
+  final DateTime? createdAt;
+  // LiveKit feature flags
+  final bool voiceEnabled;
+  final bool videoEnabled;
+  final bool projectionEnabled;
 
   const CommunityChatRoomEntity({
     required this.id,
     required this.communityId,
+    this.creatorId,
+    this.creatorAvatarUrl,
     required this.type,
     required this.title,
     this.description,
+    this.iconUrl,
+    this.backgroundImageUrl,
     required this.memberCount,
     this.lastMessage,
     required this.lastMessageTime,
@@ -38,14 +51,22 @@ class CommunityChatRoomEntity extends Equatable {
     this.pinnedOrder,
     this.isFavorite = false,
     this.avatarUrl,
+    this.createdAt,
+    this.voiceEnabled = false,
+    this.videoEnabled = false,
+    this.projectionEnabled = false,
   });
 
   CommunityChatRoomEntity copyWith({
     String? id,
     String? communityId,
+    String? creatorId,
+    String? creatorAvatarUrl,
     RoomType? type,
     String? title,
     String? description,
+    String? iconUrl,
+    String? backgroundImageUrl,
     int? memberCount,
     RoomMessage? lastMessage,
     DateTime? lastMessageTime,
@@ -55,13 +76,21 @@ class CommunityChatRoomEntity extends Equatable {
     int? pinnedOrder,
     bool? isFavorite,
     String? avatarUrl,
+    DateTime? createdAt,
+    bool? voiceEnabled,
+    bool? videoEnabled,
+    bool? projectionEnabled,
   }) {
     return CommunityChatRoomEntity(
       id: id ?? this.id,
       communityId: communityId ?? this.communityId,
+      creatorId: creatorId ?? this.creatorId,
+      creatorAvatarUrl: creatorAvatarUrl ?? this.creatorAvatarUrl,
       type: type ?? this.type,
       title: title ?? this.title,
       description: description ?? this.description,
+      iconUrl: iconUrl ?? this.iconUrl,
+      backgroundImageUrl: backgroundImageUrl ?? this.backgroundImageUrl,
       memberCount: memberCount ?? this.memberCount,
       lastMessage: lastMessage ?? this.lastMessage,
       lastMessageTime: lastMessageTime ?? this.lastMessageTime,
@@ -71,6 +100,10 @@ class CommunityChatRoomEntity extends Equatable {
       pinnedOrder: pinnedOrder ?? this.pinnedOrder,
       isFavorite: isFavorite ?? this.isFavorite,
       avatarUrl: avatarUrl ?? this.avatarUrl,
+      createdAt: createdAt ?? this.createdAt,
+      voiceEnabled: voiceEnabled ?? this.voiceEnabled,
+      videoEnabled: videoEnabled ?? this.videoEnabled,
+      projectionEnabled: projectionEnabled ?? this.projectionEnabled,
     );
   }
 
@@ -78,9 +111,13 @@ class CommunityChatRoomEntity extends Equatable {
   List<Object?> get props => [
         id,
         communityId,
+        creatorId,
+        creatorAvatarUrl,
         type,
         title,
         description,
+        iconUrl,
+        backgroundImageUrl,
         memberCount,
         lastMessage,
         lastMessageTime,
@@ -90,6 +127,10 @@ class CommunityChatRoomEntity extends Equatable {
         pinnedOrder,
         isFavorite,
         avatarUrl,
+        createdAt,
+        voiceEnabled,
+        videoEnabled,
+        projectionEnabled,
       ];
 }
 

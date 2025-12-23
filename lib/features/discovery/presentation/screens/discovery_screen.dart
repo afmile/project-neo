@@ -5,6 +5,7 @@ import 'package:project_neo/core/theme/neo_theme.dart';
 import 'package:project_neo/features/home/presentation/providers/home_providers.dart';
 import 'package:project_neo/features/home/presentation/widgets/community_card.dart';
 import 'package:project_neo/features/community/presentation/screens/create_community_screen.dart';
+import 'package:project_neo/features/community/presentation/providers/community_providers.dart';
 
 class DiscoveryScreen extends ConsumerStatefulWidget {
   const DiscoveryScreen({super.key});
@@ -234,7 +235,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
                         imageUrl: community.bannerUrl,
                         memberCount: community.memberCount,
                         communityId: community.id,
-                        onTap: () => context.push('/community_preview', extra: community),
+                        onTap: () => _handleCommunityTap(community),
                       );
                     },
                   ),
@@ -314,6 +315,28 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
         ),
       ),
     );
+  }
+
+  void _handleCommunityTap(dynamic community) {
+    // Check if user is already a member
+    final userCommunitiesAsync = ref.read(userCommunitiesProvider);
+    
+    userCommunitiesAsync.whenData((userCommunities) {
+      final isMember = userCommunities.any((c) => c.id == community.id);
+      
+      if (isMember) {
+        // User is already a member - go directly to community home
+        context.go('/community_home', extra: community);
+      } else {
+        // User is not a member - show preview/join screen
+        context.push('/community_preview', extra: community);
+      }
+    });
+    
+    // If userCommunitiesProvider is still loading or errored, default to preview screen
+    if (!userCommunitiesAsync.hasValue) {
+      context.push('/community_preview', extra: community);
+    }
   }
 
   void _navigateToCreateCommunity() {

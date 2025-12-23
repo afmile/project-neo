@@ -22,6 +22,9 @@ class UserEntity extends Equatable {
   /// Avatar URL
   final String? avatarUrl;
   
+  /// User bio/description
+  final String? bio;
+  
   /// Security clearance level (1-99, 99 = GOD MODE)
   final int clearanceLevel;
   
@@ -46,6 +49,7 @@ class UserEntity extends Equatable {
     required this.username,
     this.displayName,
     this.avatarUrl,
+    this.bio,
     this.clearanceLevel = 1,
     this.isIncognito = false,
     this.neocoinsBalance = 0,
@@ -83,6 +87,7 @@ class UserEntity extends Equatable {
     String? username,
     String? displayName,
     String? avatarUrl,
+    String? bio,
     int? clearanceLevel,
     bool? isIncognito,
     double? neocoinsBalance,
@@ -96,6 +101,7 @@ class UserEntity extends Equatable {
       username: username ?? this.username,
       displayName: displayName ?? this.displayName,
       avatarUrl: avatarUrl ?? this.avatarUrl,
+      bio: bio ?? this.bio,
       clearanceLevel: clearanceLevel ?? this.clearanceLevel,
       isIncognito: isIncognito ?? this.isIncognito,
       neocoinsBalance: neocoinsBalance ?? this.neocoinsBalance,
@@ -112,6 +118,7 @@ class UserEntity extends Equatable {
     username,
     displayName,
     avatarUrl,
+    bio,
     clearanceLevel,
     isIncognito,
     neocoinsBalance,
