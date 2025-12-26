@@ -107,12 +107,39 @@ class UserWallPostsNotifier extends StateNotifier<AsyncValue<List<WallPost>>> {
 
       print('🔍 MURO: Buscando posts con profile_user_id=$userId');
       
+      // Fetch posts with author info and user likes
       final response = await supabase
           .from('wall_posts')
-          .select('*, author:users_global!wall_posts_author_id_fkey(username, avatar_global_url)')
+          .select('''
+            *,
+            author:users_global!wall_posts_author_id_fkey(username, avatar_global_url),
+            user_likes:wall_post_likes(user_id)
+          ''')
           .eq('profile_user_id', userId)
           .order('created_at', ascending: false)
           .limit(50);
+      
+      // Fetch comments count for each post
+      final postIds = (response as List).map((p) => p['id'] as String).toList();
+      final commentsCounts = <String, int>{};
+      
+      if (postIds.isNotEmpty) {
+        final commentsResponse = await supabase
+            .from('wall_post_comments')
+            .select('post_id')
+            .inFilter('post_id', postIds);
+        
+        // Count comments per post
+        for (final comment in commentsResponse as List) {
+          final postId = comment['post_id'] as String;
+          commentsCounts[postId] = (commentsCounts[postId] ?? 0) + 1;
+        }
+      }
+      
+      // Add comments_count to each post
+      for (final post in response as List) {
+        post['comments_count'] = commentsCounts[post['id']] ?? 0;
+      }
 
       print('📦 MURO: Recibidos ${(response as List).length} posts');
 
@@ -184,6 +211,65 @@ class UserWallPostsNotifier extends StateNotifier<AsyncValue<List<WallPost>>> {
       return true;
     } catch (e) {
       return false;
+    }
+  }
+  
+  /// Toggle like on a wall post (optimistic UI)
+  Future<void> toggleLike(String postId) async {
+    final currentState = state.value;
+    if (currentState == null) return;
+    
+    // Find the post
+    final postIndex = currentState.indexWhere((p) => p.id == postId);
+    if (postIndex == -1) return;
+    
+    final post = currentState[postIndex];
+    final wasLiked = post.isLikedByCurrentUser;
+    
+    // Optimistic update: Update UI immediately
+    final updatedPost = post.copyWith(
+      isLikedByCurrentUser: !wasLiked,
+      likes: wasLiked ? post.likes - 1 : post.likes + 1,
+    );
+    
+    final updatedPosts = List<WallPost>.from(currentState);
+    updatedPosts[postIndex] = updatedPost;
+    state = AsyncValue.data(updatedPosts);
+    
+    try {
+      final supabase = Supabase.instance.client;
+      final currentUser = ref.read(currentUserProvider);
+      
+      if (currentUser == null) {
+        throw Exception('User not authenticated');
+      }
+      
+      if (wasLiked) {
+        // Unlike: Delete the like
+        await supabase
+            .from('wall_post_likes')
+            .delete()
+            .eq('post_id', postId)
+            .eq('user_id', currentUser.id);
+      } else {
+        // Like: Insert a new like
+        await supabase
+            .from('wall_post_likes')
+            .insert({
+              'post_id': postId,
+              'user_id': currentUser.id,
+            });
+      }
+      
+      print('✅ LIKE: Toggled successfully');
+    } catch (e, stackTrace) {
+      print('❌ ERROR TOGGLE LIKE: $e');
+      print('📍 Stack trace: $stackTrace');
+      
+      // Rollback on error: Revert to original state
+      final revertedPosts = List<WallPost>.from(currentState);
+      revertedPosts[postIndex] = post;
+      state = AsyncValue.data(revertedPosts);
     }
   }
 }

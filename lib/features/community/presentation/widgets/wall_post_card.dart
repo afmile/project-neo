@@ -11,6 +11,7 @@ import '../../domain/entities/wall_post.dart';
 class WallPostCard extends StatelessWidget {
   final WallPost post;
   final VoidCallback? onLike;
+  final VoidCallback? onComment;
   final VoidCallback? onDelete;
   final bool canDelete;
 
@@ -18,6 +19,7 @@ class WallPostCard extends StatelessWidget {
     super.key,
     required this.post,
     this.onLike,
+    this.onComment,
     this.onDelete,
     this.canDelete = false,
   });
@@ -34,30 +36,8 @@ class WallPostCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Left Column: Avatar + Vertical Line
-              Column(
-                children: [
-                  // Avatar
-                  _buildAvatar(),
-                  
-                  // Vertical connecting line
-                  Container(
-                    width: 2,
-                    height: 40, // Extends downward
-                    margin: const EdgeInsets.only(top: 4),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.grey.withValues(alpha: 0.3),
-                          Colors.grey.withValues(alpha: 0.0),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              // Left Column: Avatar only (no line for independent posts)
+              _buildAvatar(),
               
               const SizedBox(width: 12),
               
@@ -85,6 +65,21 @@ class WallPostCard extends StatelessWidget {
                     
                     // Action Buttons Row
                     _buildActionBar(),
+                    
+                    // Comments count (if any)
+                    if (post.commentsCount > 0) ...[
+                      const SizedBox(height: 8),
+                      InkWell(
+                        onTap: onComment,
+                        child: Text(
+                          'Ver ${post.commentsCount} comentario${post.commentsCount != 1 ? 's' : ''}',
+                          style: TextStyle(
+                            color: Colors.grey.withValues(alpha: 0.6),
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -178,18 +173,50 @@ class WallPostCard extends StatelessWidget {
         
         const Spacer(),
         
-        // 3-dot menu
-        InkWell(
-          onTap: canDelete ? onDelete : null,
-          borderRadius: BorderRadius.circular(20),
-          child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: Icon(
-              Icons.more_horiz,
-              color: Colors.grey.withValues(alpha: 0.6),
-              size: 20,
+        // 3-dot menu with delete option
+        PopupMenuButton<String>(
+          icon: Icon(
+            Icons.more_horiz,
+            color: Colors.grey.withValues(alpha: 0.6),
+            size: 20,
+          ),
+          color: const Color(0xFF1C1C1E),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: Colors.grey.withValues(alpha: 0.2),
+              width: 1,
             ),
           ),
+          itemBuilder: (context) => canDelete
+              ? [
+                  PopupMenuItem<String>(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.delete_outline,
+                          color: Colors.red.withValues(alpha: 0.9),
+                          size: 20,
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Eliminar',
+                          style: TextStyle(
+                            color: Colors.red.withValues(alpha: 0.9),
+                            fontSize: 15,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ]
+              : [],
+          onSelected: (value) {
+            if (value == 'delete' && onDelete != null) {
+              onDelete!();
+            }
+          },
         ),
       ],
     );
@@ -214,32 +241,10 @@ class WallPostCard extends StatelessWidget {
         _buildActionButton(
           icon: Icons.chat_bubble_outline,
           label: null,
-          onTap: () {
-            // TODO: Open comments
-          },
+          onTap: onComment,
         ),
         
-        const SizedBox(width: 20),
-        
-        // Repost button
-        _buildActionButton(
-          icon: Icons.repeat_rounded,
-          label: null,
-          onTap: () {
-            // TODO: Repost
-          },
-        ),
-        
-        const SizedBox(width: 20),
-        
-        // Share button
-        _buildActionButton(
-          icon: Icons.send_outlined,
-          label: null,
-          onTap: () {
-            // TODO: Share
-          },
-        ),
+
       ],
     );
   }

@@ -5,6 +5,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -912,18 +913,228 @@ class _CommunityUserProfileScreenState
         }
 
         return Column(
-          children: posts.map((post) => WallPostCard(
-            post: post,
-            onLike: () {
-              // TODO: Implement like
-            },
-            canDelete: isOwner || post.authorId == ref.read(currentUserProvider)?.id,
-            onDelete: () {
-              // TODO: Implement delete
-            },
-          )).toList(),
+          children: posts.map((post) {
+            final currentUser = ref.read(currentUserProvider);
+            final canDelete = currentUser?.id == post.authorId || 
+                             currentUser?.id == widget.userId;
+            
+            return WallPostCard(
+              post: post,
+              onLike: () {
+                ref
+                    .read(userWallPostsProvider(widget.userId).notifier)
+                    .toggleLike(post.id);
+              },
+              onComment: () {
+                _showCommentModal(context, post);
+              },
+              canDelete: canDelete,
+              onDelete: () async {
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    backgroundColor: NeoColors.card,
+                    title: const Text(
+                      'Eliminar Post',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    content: const Text(
+                      '¿Estás seguro de que quieres eliminar este post?',
+                      style: TextStyle(color: NeoColors.textSecondary),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        child: const Text(
+                          'Cancelar',
+                          style: TextStyle(color: NeoColors.textSecondary),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        child: const Text(
+                          'Eliminar',
+                          style: TextStyle(color: NeoColors.error),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+                
+                if (confirmed == true) {
+                  await ref
+                      .read(userWallPostsProvider(widget.userId).notifier)
+                      .deleteWallPost(post.id);
+                }
+              },
+            );
+          }).toList(),
         );
       },
+    );
+  }
+  
+  /// Show comment modal bottom sheet
+  void _showCommentModal(BuildContext context, WallPost post) {
+    final commentController = TextEditingController();
+    bool isSubmitting = false;
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: NeoColors.card,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Row(
+                  children: [
+                    const Text(
+                      'Comentar',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                
+                const SizedBox(height: 16),
+                
+                // Original post preview
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    post.content,
+                    style: TextStyle(
+                      color: Colors.grey.withValues(alpha: 0.8),
+                      fontSize: 14,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                
+                const SizedBox(height: 16),
+                
+                // Comment input
+                TextField(
+                  controller: commentController,
+                  autofocus: true,
+                  maxLines: 3,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: 'Responde a este post...',
+                    hintStyle: TextStyle(
+                      color: Colors.grey.withValues(alpha: 0.5),
+                    ),
+                    filled: true,
+                    fillColor: Colors.black.withValues(alpha: 0.3),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(height: 16),
+                
+                // Send button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: isSubmitting
+                        ? null
+                        : () async {
+                            final content = commentController.text.trim();
+                            if (content.isEmpty) return;
+                            
+                            setState(() {
+                              isSubmitting = true;
+                            });
+                            
+                            try {
+                              final supabase = Supabase.instance.client;
+                              final currentUser = ref.read(currentUserProvider);
+                              
+                              if (currentUser == null) return;
+                              
+                              await supabase.from('wall_post_comments').insert({
+                                'post_id': post.id,
+                                'author_id': currentUser.id,
+                                'content': content,
+                              });
+                              
+                              // Refresh posts to update comment count
+                              await ref
+                                  .read(userWallPostsProvider(widget.userId).notifier)
+                                  .refresh();
+                              
+                              if (context.mounted) {
+                                Navigator.pop(context);
+                              }
+                            } catch (e) {
+                              print('❌ ERROR POSTING COMMENT: $e');
+                              setState(() {
+                                isSubmitting = false;
+                              });
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: NeoColors.accent,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: isSubmitting
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Comentar',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

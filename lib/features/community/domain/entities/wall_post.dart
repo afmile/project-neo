@@ -41,6 +41,9 @@ class WallPost extends Equatable {
   
   /// Whether current user has liked this post
   final bool isLikedByCurrentUser;
+  
+  /// Number of comments on this post
+  final int commentsCount;
 
   const WallPost({
     required this.id,
@@ -51,6 +54,7 @@ class WallPost extends Equatable {
     required this.timestamp,
     this.likes = 0,
     this.isLikedByCurrentUser = false,
+    this.commentsCount = 0,
   });
 
   WallPost copyWith({
@@ -62,6 +66,7 @@ class WallPost extends Equatable {
     DateTime? timestamp,
     int? likes,
     bool? isLikedByCurrentUser,
+    int? commentsCount,
   }) {
     return WallPost(
       id: id ?? this.id,
@@ -72,6 +77,7 @@ class WallPost extends Equatable {
       timestamp: timestamp ?? this.timestamp,
       likes: likes ?? this.likes,
       isLikedByCurrentUser: isLikedByCurrentUser ?? this.isLikedByCurrentUser,
+      commentsCount: commentsCount ?? this.commentsCount,
     );
   }
 
@@ -85,5 +91,6 @@ class WallPost extends Equatable {
         timestamp,
         likes,
         isLikedByCurrentUser,
+        commentsCount,
       ];
 }

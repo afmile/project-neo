@@ -11,6 +11,12 @@ class WallPostModel {
     // Extract author data from joined users_global table
     final author = json['author'] as Map<String, dynamic>?;
     
+    // Check if current user liked this post
+    final userLikes = json['user_likes'] as List<dynamic>?;
+    final isLikedByMe = currentUserId != null &&
+        userLikes != null &&
+        userLikes.any((like) => like['user_id'] == currentUserId);
+    
     return WallPost(
       id: json['id'] as String,
       authorId: json['author_id'] as String,
@@ -19,7 +25,8 @@ class WallPostModel {
       content: json['content'] as String,
       timestamp: DateTime.parse(json['created_at'] as String),
       likes: json['likes_count'] as int? ?? 0,
-      isLikedByCurrentUser: false, // TODO: Check if current user liked this post
+      isLikedByCurrentUser: isLikedByMe,
+      commentsCount: json['comments_count'] as int? ?? 0,
     );
   }
 
