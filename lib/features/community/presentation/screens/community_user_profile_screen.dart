@@ -39,6 +39,8 @@ class _CommunityUserProfileScreenState
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   WallPrivacyLevel _wallPrivacy = WallPrivacyLevel.public;
+  final TextEditingController _wallInputController = TextEditingController();
+  bool _isPostingToWall = false;
   
   // TODO: Implement real privacy and friendship checks
   final bool _isFriend = true; // Change to false to test privacy
@@ -197,6 +199,7 @@ class _CommunityUserProfileScreenState
   @override
   void dispose() {
     _tabController.dispose();
+    _wallInputController.dispose();
     super.dispose();
   }
 
@@ -277,17 +280,42 @@ class _CommunityUserProfileScreenState
         ),
         child: Column(
           children: [
-            // Top bar: Back button + NeoCoins
+            // Top bar: 3-dot menu + NeoCoins
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Colors.white),
-                  onPressed: () => Navigator.pop(context),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
+                // 3-dot menu button
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, color: Colors.white),
+                  color: NeoColors.card,
+                  onSelected: (value) {
+                    if (value == 'privacy') {
+                      // TODO: Show privacy settings dialog
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Configuración de privacidad (próximamente)'),
+                          backgroundColor: NeoColors.accent,
+                        ),
+                      );
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem<String>(
+                      value: 'privacy',
+                      child: Row(
+                        children: [
+                          Icon(Icons.privacy_tip_outlined, color: NeoColors.accent, size: 20),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Privacidad del Muro',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                // NeoCoins widget (Only show if current user or maybe specific logic? Keeping visual for now)
+                // NeoCoins widget
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -310,7 +338,6 @@ class _CommunityUserProfileScreenState
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        // Show real balance if available, else 0 or hide
                         '${user.neocoinsBalance.toInt()}', 
                         style: TextStyle(
                           color: const Color(0xFFFFD700),
@@ -497,15 +524,9 @@ class _CommunityUserProfileScreenState
       child: ListView(
         padding: const EdgeInsets.all(NeoSpacing.md),
         children: [
-          // Privacy settings (owner only)
-          if (isOwner) ...[
-            _buildPrivacySettings(),
-            const SizedBox(height: NeoSpacing.md),
-          ],
-          
           // Input box (conditional)
           if (canPostOnWall(isOwner)) ...[
-            _buildWallInput(user),
+            _buildWallInput(user, isOwner),
             const SizedBox(height: NeoSpacing.lg),
           ],
           
@@ -575,7 +596,11 @@ class _CommunityUserProfileScreenState
     );
   }
 
-  Widget _buildWallInput(UserEntity? user) {
+  Widget _buildWallInput(UserEntity? user, bool isOwner) {
+    final placeholder = isOwner 
+        ? 'Publica en tu muro'
+        : 'Escribe en el muro de ${user?.username ?? '...'}';
+    
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: 16,
@@ -590,9 +615,10 @@ class _CommunityUserProfileScreenState
           // Input field
           Expanded(
             child: TextField(
+              controller: _wallInputController,
               style: const TextStyle(color: Colors.white, fontSize: 14),
               decoration: InputDecoration(
-                hintText: 'Escribe en el muro de ${user?.username ?? '...'}...',
+                hintText: placeholder,
                 hintStyle: TextStyle(
                   color: Colors.white.withValues(alpha: 0.4),
                   fontSize: 14,
@@ -600,25 +626,68 @@ class _CommunityUserProfileScreenState
                 border: InputBorder.none,
                 contentPadding: EdgeInsets.zero,
               ),
+              maxLines: null,
+              textInputAction: TextInputAction.send,
+              onSubmitted: (_) => _handleSendPost(),
             ),
           ),
           
           // Send button (integrated)
-          IconButton(
-            icon: const Icon(
-              Icons.send,
-              color: NeoColors.accent,
-              size: 20,
+          if (_isPostingToWall)
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: NeoColors.accent,
+              ),
+            )
+          else
+            IconButton(
+              icon: const Icon(
+                Icons.send,
+                color: NeoColors.accent,
+                size: 20,
+              ),
+              onPressed: _handleSendPost,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
             ),
-            onPressed: () {
-              // TODO: Implement post
-            },
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-          ),
         ],
       ),
     );
+  }
+  
+  Future<void> _handleSendPost() async {
+    final content = _wallInputController.text.trim();
+    if (content.isEmpty || _isPostingToWall) return;
+    
+    setState(() {
+      _isPostingToWall = true;
+    });
+    
+    final success = await ref
+        .read(userWallPostsProvider(widget.userId).notifier)
+        .createWallPost(content);
+    
+    setState(() {
+      _isPostingToWall = false;
+    });
+    
+    if (success) {
+      _wallInputController.clear();
+      // Optionally show success feedback
+    } else {
+      // Show error
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error al publicar. Intenta de nuevo.'),
+            backgroundColor: NeoColors.error,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildActivityTab() {
@@ -761,8 +830,6 @@ class _CommunityUserProfileScreenState
           _buildStatItem('Seguidores', 0),
           Container(width: 1, height: 30, color: Colors.white24),
           _buildStatItem('Siguiendo', 0),
-          Container(width: 1, height: 30, color: Colors.white24),
-          _buildStatItem('Posts', 0),
         ],
       ),
       error: (_, __) => Row(
@@ -771,8 +838,6 @@ class _CommunityUserProfileScreenState
           _buildStatItem('Seguidores', 0),
           Container(width: 1, height: 30, color: Colors.white24),
           _buildStatItem('Siguiendo', 0),
-          Container(width: 1, height: 30, color: Colors.white24),
-          _buildStatItem('Posts', 0),
         ],
       ),
       data: (stats) => Row(
@@ -781,8 +846,6 @@ class _CommunityUserProfileScreenState
           _buildStatItem('Seguidores', stats.followersCount),
           Container(width: 1, height: 30, color: Colors.white24),
           _buildStatItem('Siguiendo', stats.followingCount),
-          Container(width: 1, height: 30, color: Colors.white24),
-          _buildStatItem('Posts', stats.wallPostsCount),
         ],
       ),
     );

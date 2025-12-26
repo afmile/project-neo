@@ -15,7 +15,7 @@ class WallPostModel {
       id: json['id'] as String,
       authorId: json['author_id'] as String,
       authorName: author?['username'] as String? ?? 'Usuario',
-      authorAvatar: author?['avatar_url'] as String?,
+      authorAvatar: author?['avatar_global_url'] as String?,
       content: json['content'] as String,
       timestamp: DateTime.parse(json['created_at'] as String),
       likes: json['likes_count'] as int? ?? 0,

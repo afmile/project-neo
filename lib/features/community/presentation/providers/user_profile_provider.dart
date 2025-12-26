@@ -87,27 +87,114 @@ final userStatsProvider = FutureProvider.family<UserStats, String>((ref, userId)
 // WALL POSTS PROVIDER
 // ═══════════════════════════════════════════════════════════════════════════
 
-/// Provider to fetch wall posts for a user with author information
-final userWallPostsProvider = FutureProvider.family<List<WallPost>, String>((ref, userId) async {
-  final supabase = Supabase.instance.client;
-  final currentUser = ref.watch(currentUserProvider);
-
-  try {
-    final response = await supabase
-        .from('wall_posts')
-        .select('*, author:users_global!wall_posts_author_id_fkey(id, username, avatar_url)')
-        .eq('profile_user_id', userId)
-        .order('created_at', ascending: false)
-        .limit(50);
-
-    return WallPostModel.listFromSupabase(
-      response as List<dynamic>,
-      currentUser?.id,
-    );
-  } catch (e) {
-    // Return empty list on error
-    return [];
+/// StateNotifier for managing wall posts with create/refresh capabilities
+class UserWallPostsNotifier extends StateNotifier<AsyncValue<List<WallPost>>> {
+  final String userId;
+  final Ref ref;
+  
+  UserWallPostsNotifier(this.userId, this.ref) : super(const AsyncValue.loading()) {
+    refresh();
   }
+
+  /// Refresh wall posts from database
+  Future<void> refresh() async {
+    print('🔄 MURO: Iniciando refresh para userId=$userId');
+    state = const AsyncValue.loading();
+    
+    try {
+      final supabase = Supabase.instance.client;
+      final currentUser = ref.read(currentUserProvider);
+
+      print('🔍 MURO: Buscando posts con profile_user_id=$userId');
+      
+      final response = await supabase
+          .from('wall_posts')
+          .select('*, author:users_global!wall_posts_author_id_fkey(username, avatar_global_url)')
+          .eq('profile_user_id', userId)
+          .order('created_at', ascending: false)
+          .limit(50);
+
+      print('📦 MURO: Recibidos ${(response as List).length} posts');
+
+      final posts = WallPostModel.listFromSupabase(
+        response as List<dynamic>,
+        currentUser?.id,
+      );
+      
+      print('✅ MURO: Posts procesados exitosamente');
+      state = AsyncValue.data(posts);
+    } catch (e, stackTrace) {
+      print('❌ ERROR REFRESH MURO: $e');
+      print('📍 Stack trace: $stackTrace');
+      state = AsyncValue.error(e, stackTrace);
+    }
+  }
+
+  /// Create a new wall post
+  Future<bool> createWallPost(String content) async {
+    if (content.trim().isEmpty) {
+      print('❌ MURO: Contenido vacío');
+      return false;
+    }
+
+    try {
+      final supabase = Supabase.instance.client;
+      final currentUser = ref.read(currentUserProvider);
+      
+      if (currentUser == null) {
+        print('❌ MURO: Usuario no autenticado');
+        return false;
+      }
+
+      final payload = {
+        'profile_user_id': userId,
+        'author_id': currentUser.id,
+        'content': content.trim(),
+      };
+      
+      print('📤 MURO: Insertando post -> $payload');
+      
+      await supabase.from('wall_posts').insert(payload);
+
+      print('✅ MURO: Post insertado exitosamente');
+      
+      // Refresh the list to show the new post
+      await refresh();
+      return true;
+    } catch (e, stackTrace) {
+      print('❌ ERROR MURO: $e');
+      print('📍 Stack trace: $stackTrace');
+      // Keep current state, don't overwrite with error
+      return false;
+    }
+  }
+
+  /// Delete a wall post
+  Future<bool> deleteWallPost(String postId) async {
+    try {
+      final supabase = Supabase.instance.client;
+      
+      await supabase
+          .from('wall_posts')
+          .delete()
+          .eq('id', postId);
+
+      // Refresh the list
+      await refresh();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+}
+
+/// Provider to manage wall posts for a specific user
+final userWallPostsProvider = StateNotifierProvider.family<
+    UserWallPostsNotifier,
+    AsyncValue<List<WallPost>>,
+    String
+>((ref, userId) {
+  return UserWallPostsNotifier(userId, ref);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -69,10 +69,13 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Check if keyboard is visible
+    final keyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
+    
     return Scaffold(
       backgroundColor: Colors.black,
       body: _buildBody(),
-      floatingActionButton: isMember
+      floatingActionButton: isMember && !keyboardVisible
           ? _buildCentralFAB()
           : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
