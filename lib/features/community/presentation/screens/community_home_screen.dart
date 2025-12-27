@@ -22,6 +22,8 @@ import 'community_friends_tab.dart';
 import 'create_content_screen.dart';
 import 'content_detail_screen.dart';
 import '../providers/content_providers.dart';
+import '../providers/community_presence_provider.dart';
+import '../providers/community_members_provider.dart';
 import 'community_studio_screen.dart';
 
 class CommunityHomeScreen extends ConsumerStatefulWidget {
@@ -49,12 +51,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   bool _isSearching = false; // Search mode toggle
   final _searchController = TextEditingController();
 
-  // Dummy online users for facepile
-  final List<String> _onlineUsers = [
-    '', // Empty strings will show placeholder avatars
-    '',
-    '',
-  ];
+  // Removed: Dummy online users for facepile, now using real data
 
   @override
   void initState() {
@@ -274,48 +271,71 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                         const SizedBox(height: 6),
 
                         // Member Stats with Facepile
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.person_outline,
-                              color: Colors.white70,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${_formatMemberCount(widget.community.memberCount)} Miembros',
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF10B981), // Green
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            const Text(
-                              '150 Online',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            // Facepile
-                            FacepileWidget(
-                              avatarUrls: _onlineUsers,
-                              maxVisible: 3,
-                              size: 24,
-                            ),
-                          ],
+                        Builder(
+                          builder: (context) {
+                            final presenceState = ref.watch(
+                              communityPresenceProvider(widget.community.id),
+                            );
+                            final membersAsync = ref.watch(
+                              communityMembersProvider(widget.community.id),
+                            );
+                            final onlineCount = presenceState.onlineCount;
+                            
+                            // Get avatars of online users
+                            final onlineAvatars = membersAsync.when(
+                              data: (members) => members
+                                  .where((m) => presenceState.isUserOnline(m.id))
+                                  .take(3)
+                                  .map((m) => m.avatarUrl ?? '')
+                                  .toList(),
+                              loading: () => <String>[],
+                              error: (_, __) => <String>[],
+                            );
+                            
+                            return Row(
+                              children: [
+                                const Icon(
+                                  Icons.person_outline,
+                                  color: Colors.white70,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${_formatMemberCount(widget.community.memberCount)} Miembros',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFF10B981), // Green
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '$onlineCount Online',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                // Facepile
+                                FacepileWidget(
+                                  avatarUrls: onlineAvatars,
+                                  maxVisible: 3,
+                                  size: 24,
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       ],
                     ),

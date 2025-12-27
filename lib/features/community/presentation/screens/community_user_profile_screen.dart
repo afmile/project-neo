@@ -6,9 +6,12 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/neo_theme.dart';
+import '../../../auth/domain/entities/user_entity.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/entities/user_title_tag.dart';
 import '../../domain/entities/wall_post.dart';
 import '../../domain/entities/pinned_content.dart';
+import '../providers/user_profile_provider.dart';
 import '../widgets/user_title_tag_widget.dart';
 import '../widgets/wall_post_card.dart';
 import '../widgets/pinned_content_card.dart';
@@ -37,20 +40,13 @@ class _CommunityUserProfileScreenState
   late TabController _tabController;
   WallPrivacyLevel _wallPrivacy = WallPrivacyLevel.public;
   
-  // Mock data
-  final String _username = 'Ana García';
-  final int _level = 42;
-  final int _followers = 1234;
-  final int _following = 567;
-  final int _posts = 89;
-  final bool _isOwner = false; // Change to true to test owner features
+  // TODO: Implement real privacy and friendship checks
   final bool _isFriend = true; // Change to false to test privacy
   
   // Friendship status for testing (change to test different states)
   FriendshipStatus _friendshipStatus = FriendshipStatus.friends; // Try: notFollowing, followingThem, friends
 
-  late List<UserTitleTag> _titleTags;
-  late List<WallPost> _wallPosts;
+  // Pinned content - TODO: Connect to real data when content feature is ready
   late List<PinnedContent> _pinnedContent;
   late List<PinnedContent> _activityItems;
 
@@ -58,81 +54,13 @@ class _CommunityUserProfileScreenState
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _initializeMockData();
+    _initializePlaceholderContent();
   }
 
-  void _initializeMockData() {
-    // Title Tags - Colorful and vibrant
-    _titleTags = [
-      const UserTitleTag(
-        text: 'Líder',
-        backgroundColor: Color(0xFF8B5CF6),
-        textColor: Colors.white,
-        displayOrder: 0,
-      ),
-      const UserTitleTag(
-        text: 'Artista 🎨',
-        backgroundColor: Color(0xFFEC4899),
-        textColor: Colors.white,
-        displayOrder: 1,
-      ),
-      const UserTitleTag(
-        text: 'Veterano',
-        backgroundColor: Color(0xFF10B981),
-        textColor: Colors.white,
-        displayOrder: 2,
-      ),
-    ];
-
-    // Wall Posts
+  void _initializePlaceholderContent() {
+    // Placeholder for pinned content and activity
+    // TODO: Connect to real content when feature is ready
     final now = DateTime.now();
-    _wallPosts = [
-      WallPost(
-        id: 'post_1',
-        authorId: 'user_1',
-        authorName: 'Carlos Ruiz',
-        content: '¡Felicidades por tu nuevo logro! 🎉 Te lo mereces totalmente.',
-        timestamp: now.subtract(const Duration(hours: 2)),
-        likes: 15,
-        isLikedByCurrentUser: true,
-      ),
-      WallPost(
-        id: 'post_2',
-        authorId: 'user_2',
-        authorName: 'María López',
-        content: 'Gracias por tu ayuda con el proyecto. Eres increíble! 💪',
-        timestamp: now.subtract(const Duration(hours: 5)),
-        likes: 8,
-        isLikedByCurrentUser: false,
-      ),
-      WallPost(
-        id: 'post_3',
-        authorId: 'user_3',
-        authorName: 'Pedro Sánchez',
-        content: 'Excelente tutorial sobre Flutter! Me ayudó mucho.',
-        timestamp: now.subtract(const Duration(days: 1)),
-        likes: 23,
-        isLikedByCurrentUser: true,
-      ),
-      WallPost(
-        id: 'post_4',
-        authorId: 'user_4',
-        authorName: 'Laura Martínez',
-        content: 'Nos vemos en el evento de mañana! 🚀',
-        timestamp: now.subtract(const Duration(days: 2)),
-        likes: 12,
-        isLikedByCurrentUser: false,
-      ),
-      WallPost(
-        id: 'post_5',
-        authorId: 'user_5',
-        authorName: 'Diego Torres',
-        content: 'Increíble trabajo en la comunidad. Sigue así! 🌟',
-        timestamp: now.subtract(const Duration(days: 3)),
-        likes: 31,
-        isLikedByCurrentUser: true,
-      ),
-    ];
 
     // Pinned Content
     _pinnedContent = [
@@ -272,8 +200,8 @@ class _CommunityUserProfileScreenState
     super.dispose();
   }
 
-  bool get _canPostOnWall {
-    if (_isOwner) return true;
+  bool canPostOnWall(bool isOwner) {
+    if (isOwner) return true;
     if (_wallPrivacy == WallPrivacyLevel.public) return true;
     if (_wallPrivacy == WallPrivacyLevel.friendsOnly && _isFriend) return true;
     return false;
@@ -281,12 +209,33 @@ class _CommunityUserProfileScreenState
 
   @override
   Widget build(BuildContext context) {
+    // 1. Get current user
+    final currentUser = ref.watch(currentUserProvider);
+    
+    // 2. Fetch target user if not current
+    final isCurrentUser = widget.userId == currentUser?.id;
+    final AsyncValue<UserEntity?> targetUserAsync = isCurrentUser 
+        ? AsyncValue.data(currentUser) 
+        : ref.watch(userProfileProvider(widget.userId));
+        
+    final displayUser = isCurrentUser ? currentUser : targetUserAsync.value;
+    
+    // 3. Handle loading
+    if (targetUserAsync.isLoading && displayUser == null) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: CircularProgressIndicator(color: NeoColors.accent),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: CustomScrollView(
         slivers: [
           // Header with avatar, name, tags, stats
-          _buildHeader(),
+          _buildHeader(displayUser, isCurrentUser),
           
           // Tabs
           _buildTabBar(),
@@ -296,7 +245,7 @@ class _CommunityUserProfileScreenState
             child: TabBarView(
               controller: _tabController,
               children: [
-                _buildWallTab(),
+                _buildWallTab(displayUser, isCurrentUser),
                 _buildActivityTab(),
               ],
             ),
@@ -306,7 +255,9 @@ class _CommunityUserProfileScreenState
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(UserEntity? user, bool isOwner) {
+    if (user == null) return const SliverToBoxAdapter(child: SizedBox());
+    
     return SliverToBoxAdapter(
       child: Container(
         padding: EdgeInsets.only(
@@ -336,7 +287,7 @@ class _CommunityUserProfileScreenState
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
-                // NeoCoins widget
+                // NeoCoins widget (Only show if current user or maybe specific logic? Keeping visual for now)
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -359,7 +310,8 @@ class _CommunityUserProfileScreenState
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        '1,250',
+                        // Show real balance if available, else 0 or hide
+                        '${user.neocoinsBalance.toInt()}', 
                         style: TextStyle(
                           color: const Color(0xFFFFD700),
                           fontSize: 13,
@@ -386,11 +338,23 @@ class _CommunityUserProfileScreenState
                   width: 3,
                 ),
               ),
-              child: const Icon(
-                Icons.person,
-                color: NeoColors.accent,
-                size: 40,
-              ),
+              child: user.avatarUrl != null && user.avatarUrl!.isNotEmpty
+                  ? ClipOval(
+                      child: Image.network(
+                        user.avatarUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const Icon(
+                          Icons.person,
+                          color: NeoColors.accent,
+                          size: 40,
+                        ),
+                      ),
+                    )
+                  : const Icon(
+                      Icons.person,
+                      color: NeoColors.accent,
+                      size: 40,
+                    ),
             ),
             
             const SizedBox(height: 8),
@@ -400,7 +364,7 @@ class _CommunityUserProfileScreenState
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  _username,
+                  user.username,
                   style: NeoTextStyles.headlineMedium.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -418,7 +382,7 @@ class _CommunityUserProfileScreenState
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
-                    'Nv $_level',
+                    'Nv ${user.clearanceLevel}',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 11,
@@ -431,40 +395,31 @@ class _CommunityUserProfileScreenState
             
             const SizedBox(height: 8),
             
-            // Title Tags - Wrap for multiple tags
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 6,
-              runSpacing: 6,
-              children: _titleTags
-                  .map((tag) => UserTitleTagWidget(tag: tag))
-                  .toList(),
-            ),
+            // Title Tags - From Supabase
+            _buildTitleTags(),
             
             const SizedBox(height: 12),
-            
-            // Stats (compacted)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildStatItem('Seguidores', _followers),
-                Container(
-                  width: 1,
-                  height: 30,
-                  color: Colors.white24,
+
+            // Bio (ADDED)
+            if (user.bio != null && user.bio!.isNotEmpty) ...[
+                Text(
+                    user.bio!,
+                    textAlign: TextAlign.center,
+                    style: NeoTextStyles.bodyMedium.copyWith(
+                        color: NeoColors.textSecondary,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                 ),
-                _buildStatItem('Siguiendo', _following),
-                Container(
-                  width: 1,
-                  height: 30,
-                  color: Colors.white24,
-                ),
-                _buildStatItem('Posts', _posts),
-              ],
-            ),
+                const SizedBox(height: 12),
+            ],
             
+            // Stats - From Supabase
+            _buildStats(),
+            
+    
             // Follow button (hidden if viewing own profile)
-            if (!_isOwner) ...[
+            if (!isOwner) ...[
               const SizedBox(height: 12),
               FollowButton(
                 status: _friendshipStatus,
@@ -536,35 +491,26 @@ class _CommunityUserProfileScreenState
     );
   }
 
-  Widget _buildWallTab() {
+  Widget _buildWallTab(UserEntity? user, bool isOwner) {
     return Container(
       color: Colors.black,
       child: ListView(
         padding: const EdgeInsets.all(NeoSpacing.md),
         children: [
           // Privacy settings (owner only)
-          if (_isOwner) ...[
+          if (isOwner) ...[
             _buildPrivacySettings(),
             const SizedBox(height: NeoSpacing.md),
           ],
           
           // Input box (conditional)
-          if (_canPostOnWall) ...[
-            _buildWallInput(),
+          if (canPostOnWall(isOwner)) ...[
+            _buildWallInput(user),
             const SizedBox(height: NeoSpacing.lg),
           ],
           
-          // Wall posts
-          ..._wallPosts.map((post) => WallPostCard(
-                post: post,
-                onLike: () {
-                  // TODO: Implement like
-                },
-                canDelete: _isOwner || post.authorId == 'current_user_id',
-                onDelete: () {
-                  // TODO: Implement delete
-                },
-              )),
+          // Wall posts - From Supabase
+          _buildWallPosts(isOwner),
         ],
       ),
     );
@@ -629,7 +575,7 @@ class _CommunityUserProfileScreenState
     );
   }
 
-  Widget _buildWallInput() {
+  Widget _buildWallInput(UserEntity? user) {
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: 16,
@@ -646,7 +592,7 @@ class _CommunityUserProfileScreenState
             child: TextField(
               style: const TextStyle(color: Colors.white, fontSize: 14),
               decoration: InputDecoration(
-                hintText: 'Escribe en el muro de $_username...',
+                hintText: 'Escribe en el muro de ${user?.username ?? '...'}...',
                 hintStyle: TextStyle(
                   color: Colors.white.withValues(alpha: 0.4),
                   fontSize: 14,
@@ -777,6 +723,144 @@ class _CommunityUserProfileScreenState
           ),
         ],
       ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // NEW PROVIDER-BASED BUILDERS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Build title tags from Supabase
+  Widget _buildTitleTags() {
+    final tagsAsync = ref.watch(userTagsProvider(widget.userId));
+
+    return tagsAsync.when(
+      loading: () => const SizedBox(height: 24),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (tags) {
+        if (tags.isEmpty) return const SizedBox.shrink();
+        
+        return Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 6,
+          runSpacing: 6,
+          children: tags.map((tag) => UserTitleTagWidget(tag: tag)).toList(),
+        );
+      },
+    );
+  }
+
+  /// Build stats from Supabase
+  Widget _buildStats() {
+    final statsAsync = ref.watch(userStatsProvider(widget.userId));
+
+    return statsAsync.when(
+      loading: () => Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildStatItem('Seguidores', 0),
+          Container(width: 1, height: 30, color: Colors.white24),
+          _buildStatItem('Siguiendo', 0),
+          Container(width: 1, height: 30, color: Colors.white24),
+          _buildStatItem('Posts', 0),
+        ],
+      ),
+      error: (_, __) => Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildStatItem('Seguidores', 0),
+          Container(width: 1, height: 30, color: Colors.white24),
+          _buildStatItem('Siguiendo', 0),
+          Container(width: 1, height: 30, color: Colors.white24),
+          _buildStatItem('Posts', 0),
+        ],
+      ),
+      data: (stats) => Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildStatItem('Seguidores', stats.followersCount),
+          Container(width: 1, height: 30, color: Colors.white24),
+          _buildStatItem('Siguiendo', stats.followingCount),
+          Container(width: 1, height: 30, color: Colors.white24),
+          _buildStatItem('Posts', stats.wallPostsCount),
+        ],
+      ),
+    );
+  }
+
+  /// Build wall posts from Supabase
+  Widget _buildWallPosts(bool isOwner) {
+    final wallPostsAsync = ref.watch(userWallPostsProvider(widget.userId));
+
+    return wallPostsAsync.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.all(NeoSpacing.xl),
+        child: Center(
+          child: CircularProgressIndicator(color: NeoColors.accent),
+        ),
+      ),
+      error: (error, _) => Padding(
+        padding: const EdgeInsets.all(NeoSpacing.xl),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(Icons.error_outline, color: NeoColors.error, size: 48),
+              const SizedBox(height: NeoSpacing.md),
+              Text(
+                'Error cargando posts',
+                style: NeoTextStyles.bodyMedium.copyWith(color: NeoColors.textSecondary),
+              ),
+            ],
+          ),
+        ),
+      ),
+      data: (posts) {
+        if (posts.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.all(NeoSpacing.xl),
+            child: Center(
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.chat_bubble_outline,
+                    color: NeoColors.textTertiary,
+                    size: 48,
+                  ),
+                  const SizedBox(height: NeoSpacing.md),
+                  Text(
+                    'Aún no hay posts en el muro',
+                    style: NeoTextStyles.bodyMedium.copyWith(
+                      color: NeoColors.textSecondary,
+                    ),
+                  ),
+                  if (canPostOnWall(isOwner)) ...[ 
+                    const SizedBox(height: NeoSpacing.sm),
+                    Text(
+                      '¡Sé el primero en escribir!',
+                      style: NeoTextStyles.bodySmall.copyWith(
+                        color: NeoColors.textTertiary,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        }
+
+        return Column(
+          children: posts.map((post) => WallPostCard(
+            post: post,
+            onLike: () {
+              // TODO: Implement like
+            },
+            canDelete: isOwner || post.authorId == ref.read(currentUserProvider)?.id,
+            onDelete: () {
+              // TODO: Implement delete
+            },
+          )).toList(),
+        );
+      },
     );
   }
 }
