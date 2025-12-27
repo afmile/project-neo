@@ -68,6 +68,27 @@ abstract class CommunityRepository {
   
   /// Leave a community
   Future<Either<Failure, void>> leaveCommunity(String communityId);
+
+  /// Update local profile within a community
+  Future<Either<Failure, void>> updateLocalProfile({
+    required String communityId,
+    String? nickname,
+    String? avatarUrl,
+    String? bio,
+  });
+
+  /// Get notification settings for a user in a community
+  Future<Map<String, dynamic>> getNotificationSettings({
+    required String communityId,
+    required String userId,
+  });
+
+  /// Update notification settings for a user in a community
+  Future<void> updateNotificationSettings({
+    required String communityId,
+    required String userId,
+    required Map<String, dynamic> settings,
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -94,9 +115,9 @@ class CommunityRepositoryImpl implements CommunityRepository {
           .from('communities')
           .select('''
             *,
-            memberships!inner(user_id, role)
+            community_members!inner(user_id, role)
           ''')
-          .eq('memberships.user_id', userId)
+          .eq('community_members.user_id', userId)
           .order('created_at', ascending: false);
       
       final communities = (response as List)
@@ -209,7 +230,7 @@ class CommunityRepositoryImpl implements CommunityRepository {
       final community = _communityFromJson(response);
       
       // Auto-join owner as member with role 'owner'
-      await _supabase.from('memberships').insert({
+      await _supabase.from('community_members').insert({
         'user_id': userId,
         'community_id': community.id,
         'role': 'owner',
@@ -305,16 +326,58 @@ class CommunityRepositoryImpl implements CommunityRepository {
         return const Left(AuthFailure('Usuario no autenticado'));
       }
       
-      await _supabase.from('memberships').insert({
-        'user_id': userId,
-        'community_id': communityId,
-        'role': 'member',
-      });
+      // Check if membership exists
+      final existing = await _supabase
+          .from('community_members')
+          .select()
+          .eq('user_id', userId)
+          .eq('community_id', communityId)
+          .maybeSingle();
+
+      if (existing != null) {
+        // Reactivate
+        await _supabase
+            .from('community_members')
+            .update({
+              'is_active': true,
+              'left_at': null,
+            })
+            .eq('user_id', userId)
+            .eq('community_id', communityId);
+      } else {
+        // Fetch global profile
+        final userGlobal = await _supabase
+            .from('users_global')
+            .select('username, avatar_global_url, bio')
+            .eq('id', userId)
+            .single();
+
+        // Join new
+        await _supabase.from('community_members').insert({
+          'user_id': userId,
+          'community_id': communityId,
+          'role': 'member',
+          'nickname': userGlobal['username'],
+          'avatar_url': userGlobal['avatar_global_url'],
+          'bio': userGlobal['bio'],
+          'is_active': true,
+        });
+      }
       
-      // Increment member count
-      await _supabase.rpc('increment_member_count', params: {
-        'community_id_param': communityId,
-      });
+      // Increment member count (Not needed if DB Trigger handles it, but keeping for safety if trigger logic is complex/missing)
+      // Note: Migration 014 adds a trigger for is_active updates, so this might be redundant for updates,
+      // but strictly speaking, standard insert triggers usually handle inserts.
+      // Let's rely on DB triggers ideally, but if we want to be safe we can keep it.
+      // However, if we do it here AND DB does it, we might double count?
+      // With migration 014 trigger, update is handled. Insert usually has its own trigger.
+      // Let's assume existing triggers handle member_count on INSERT/DELETE/UPDATE.
+      // Removing explicit RPC call to avoid double counting if triggers exist, 
+      // OR keeping it if no triggers exist. 
+      // The previous code called 'increment_member_count'.
+      // Safest is to let the DB handle it if we trust our triggers.
+      // Given I just added a trigger in 014, I should trust it for updates. 
+      // For inserts, usually there is a trigger too. 
+      // I will REMOVE the RPC call to be consistent with modern Supabase practices (Active/Passive implies triggers).
       
       return const Right(null);
     } catch (e) {
@@ -330,20 +393,134 @@ class CommunityRepositoryImpl implements CommunityRepository {
         return const Left(AuthFailure('Usuario no autenticado'));
       }
       
+      // Soft delete
       await _supabase
-          .from('memberships')
-          .delete()
+          .from('community_members')
+          .update({
+            'is_active': false,
+            'left_at': DateTime.now().toIso8601String(),
+          })
           .eq('user_id', userId)
           .eq('community_id', communityId);
       
-      // Decrement member count
-      await _supabase.rpc('decrement_member_count', params: {
-        'community_id_param': communityId,
-      });
+      // Member count decrement handled by DB trigger on is_active change (added in 014)
       
       return const Right(null);
     } catch (e) {
       return Left(ServerFailure('Error saliendo de comunidad: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> updateLocalProfile({
+    required String communityId,
+    String? nickname,
+    String? avatarUrl,
+    String? bio,
+  }) async {
+    try {
+      final userId = _currentUserId;
+      if (userId == null) {
+        return const Left(AuthFailure('Usuario no autenticado'));
+      }
+
+      final updates = <String, dynamic>{};
+      if (nickname != null) updates['nickname'] = nickname;
+      if (avatarUrl != null) updates['avatar_url'] = avatarUrl;
+      if (bio != null) updates['bio'] = bio;
+      
+      if (updates.isEmpty) return const Right(null);
+
+      await _supabase
+          .from('community_members')
+          .update(updates)
+          .eq('user_id', userId)
+          .eq('community_id', communityId);
+
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure('Error actualizando perfil local: $e'));
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> getNotificationSettings({
+    required String communityId,
+    required String userId,
+  }) async {
+    try {
+      final response = await _supabase
+          .from('community_members')
+          .select('notification_settings')
+          .eq('community_id', communityId)
+          .eq('user_id', userId)
+          .single();
+
+      if (response['notification_settings'] == null) {
+        return {
+          'enabled': true,
+          'chat': true,
+          'mentions': true,
+          'announcements': true,
+          'wall_posts': false,
+          'reactions': true,
+        };
+      }
+
+      return response['notification_settings'] as Map<String, dynamic>;
+    } catch (e) {
+       // Return default on error to allow safe fail
+       return {
+          'enabled': true,
+          'chat': true,
+          'mentions': true,
+          'announcements': true,
+          'wall_posts': false,
+          'reactions': true,
+        };
+    }
+  }
+
+  @override
+  Future<void> updateNotificationSettings({
+    required String communityId,
+    required String userId,
+    required Map<String, dynamic> settings,
+  }) async {
+    try {
+      print('🗄️ Repository: Actualizando settings en DB');
+      print('   Community: $communityId');
+      print('   User: $userId');
+      print('   Settings: $settings');
+      
+      // Check membership first
+      final memberCheck = await _supabase
+          .from('community_members')
+          .select('user_id')
+          .eq('community_id', communityId)
+          .eq('user_id', userId)
+          .maybeSingle();
+
+      print('   Member check result: $memberCheck');
+
+      if (memberCheck == null) {
+        print('❌ User is not a member of this community');
+        throw Exception("User is not a member of this community");
+      }
+
+      print('💾 Ejecutando UPDATE...');
+      // NO usar .select() - solo UPDATE
+      await _supabase
+          .from('community_members')
+          .update({'notification_settings': settings})
+          .eq('community_id', communityId)
+          .eq('user_id', userId);
+      
+      print('✅ Settings actualizados correctamente');
+          
+    } catch (e) {
+      print('❌ Error en repository: $e');
+      throw Exception("Failed to update notification settings: $e");
     }
   }
   

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../../community/domain/entities/community_entity.dart';
 import '../../../community/domain/entities/post_entity.dart';
@@ -18,7 +19,7 @@ import '../../../chat/presentation/widgets/chat_catalog_grid.dart';
 import '../../../chat/presentation/screens/create_chat_screen.dart';
 import 'community_user_profile_screen.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
-import 'community_friends_tab.dart';
+import 'community_members_screen.dart';
 import 'create_content_screen.dart';
 import 'content_detail_screen.dart';
 import '../providers/content_providers.dart';
@@ -94,7 +95,10 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
       case 0:
         return _buildInicioView(); // Feed
       case 1:
-        return CommunityFriendsTab(communityId: widget.community.id); // Friends
+        return CommunityMembersScreen(
+          communityId: widget.community.id,
+          onSwitchToProfileTab: () => setState(() => _currentNavIndex = 4),
+        ); // Community Members Tab
       case 2:
         return _buildInicioView(); // Center button - same as feed
       case 3:
@@ -168,7 +172,40 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
         IconButton(
           icon: const Icon(Icons.more_vert, color: Colors.white),
           onPressed: () {
-            // TODO: Implement menu
+            // Menu Options
+            showModalBottomSheet(
+              context: context,
+              backgroundColor: Colors.transparent,
+              builder: (context) => Container(
+                decoration: const BoxDecoration(
+                  color: NeoColors.card,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: SafeArea(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.notifications_outlined, color: Colors.white),
+                        title: const Text('Configuración', style: TextStyle(color: Colors.white)),
+                        onTap: () {
+                          Navigator.pop(context);
+                          context.pushNamed(
+                            'community-settings',
+                            pathParameters: {'id': widget.community.id},
+                            extra: {
+                              'name': widget.community.title,
+                              'color': _parseColor(widget.community.theme.primaryColor),
+                            },
+                          );
+                        },
+                      ),
+                      // More options can form here
+                    ],
+                  ),
+                ),
+              ),
+            );
           },
         ),
       ],
@@ -1097,7 +1134,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             _buildNavItem(Icons.home, 'Inicio', 0),
-            _buildNavItem(Icons.people_alt, 'Amig@s', 1),
+            _buildNavItem(Icons.people_alt, 'Miembros', 1),
             const SizedBox(width: 48), // Space for FAB
             _buildNavItem(Icons.chat_bubble, 'Chats', 3),
             _buildNavItem(Icons.person, 'Perfil', 4),

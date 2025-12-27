@@ -9,35 +9,93 @@ import '../../domain/entities/user_title_tag.dart';
 import '../../data/models/wall_post_model.dart';
 import '../../data/models/user_tag_model.dart';
 
-/// Provider to fetch a user profile by ID
-final userProfileProvider = FutureProvider.family<UserEntity?, String>((ref, userId) async {
+/// Filter for wall posts provider
+class WallPostsFilter {
+  final String userId;
+  final String communityId;
+
+  const WallPostsFilter({
+    required this.userId,
+    required this.communityId,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is WallPostsFilter &&
+          runtimeType == other.runtimeType &&
+          userId == other.userId &&
+          communityId == other.communityId;
+
+  @override
+  int get hashCode => userId.hashCode ^ communityId.hashCode;
+}
+
+/// Parameter class for fetching user profile
+class UserProfileParams {
+  final String userId;
+  final String? communityId;
+
+  const UserProfileParams({required this.userId, this.communityId});
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is UserProfileParams &&
+          runtimeType == other.runtimeType &&
+          userId == other.userId &&
+          communityId == other.communityId;
+
+  @override
+  int get hashCode => userId.hashCode ^ communityId.hashCode;
+}
+
+/// Provider to fetch a user profile, optionally scoped to a community
+final userProfileProvider = FutureProvider.family<UserEntity?, UserProfileParams>((ref, params) async {
   final supabase = Supabase.instance.client;
+  final userId = params.userId;
+  final communityId = params.communityId;
 
   try {
-    // parallel fetch for performance
-    final responses = await Future.wait([
-      supabase.from('users_global').select().eq('id', userId).maybeSingle(),
-      supabase.from('security_profile').select().eq('user_id', userId).maybeSingle(),
-      // We don't fetch wallet for others for privacy usually, or maybe we do for public stats?
-      // For now omitting wallet/neocoins for other users unless public.
-    ]);
-
-    final userGlobal = responses[0] as Map<String, dynamic>?;
-    final securityProfile = responses[1] as Map<String, dynamic>?;
+    // 1. Fetch Global Data
+    final globalResponse = await supabase.from('users_global').select().eq('id', userId).maybeSingle();
     
-    if (userGlobal == null) return null;
+    if (globalResponse == null) return null;
 
-    // Use UserModel factory
-    // We pass null for wallet so neocoins might be 0, which is fine for other users.
-    return UserModel.fromSupabase(
+    // 2. Fetch Security Profile
+    final securityResponse = await supabase.from('security_profile').select().eq('user_id', userId).maybeSingle();
+    
+    // 3. (Optional) Fetch Local Community Profile
+    Map<String, dynamic>? localMember;
+    if (communityId != null) {
+      localMember = await supabase
+          .from('community_members')
+          .select('nickname, avatar_url, bio')
+          .eq('user_id', userId)
+          .eq('community_id', communityId)
+          .maybeSingle();
+    }
+
+    // 4. Construct Base User
+    UserEntity user = UserModel.fromSupabase(
       id: userId,
-      email: '', // Email is private usually, not returned in public select
-      userGlobal: userGlobal,
-      securityProfile: securityProfile,
+      email: '', 
+      userGlobal: globalResponse,
+      securityProfile: securityResponse,
       wallet: null,
     );
+
+    // 5. Apply Local Overrides if available
+    if (localMember != null) {
+      user = user.copyWith(
+        username: localMember['nickname'] as String?,
+        avatarUrl: localMember['avatar_url'] as String?,
+        bio: localMember['bio'] as String?,
+      );
+    }
+
+    return user;
   } catch (e) {
-    // If error (e.g. RLS), return null or rethrow
     return null;
   }
 });
@@ -89,23 +147,24 @@ final userStatsProvider = FutureProvider.family<UserStats, String>((ref, userId)
 
 /// StateNotifier for managing wall posts with create/refresh capabilities
 class UserWallPostsNotifier extends StateNotifier<AsyncValue<List<WallPost>>> {
-  final String userId;
+  final WallPostsFilter filter;
   final Ref ref;
   
-  UserWallPostsNotifier(this.userId, this.ref) : super(const AsyncValue.loading()) {
+  UserWallPostsNotifier(this.filter, this.ref) : super(const AsyncValue.loading()) {
     refresh();
   }
 
   /// Refresh wall posts from database
   Future<void> refresh() async {
-    print('🔄 MURO: Iniciando refresh para userId=$userId');
+    print('🔄 MURO: Iniciando refresh para userId=${filter.userId} en communityId=${filter.communityId}');
     state = const AsyncValue.loading();
     
     try {
       final supabase = Supabase.instance.client;
       final currentUser = ref.read(currentUserProvider);
 
-      print('🔍 MURO: Buscando posts con profile_user_id=$userId');
+      print('🔍 MURO: Buscando posts con profile_user_id=${filter.userId}');
+
       
       // Fetch posts with author info and user likes
       final response = await supabase
@@ -115,30 +174,69 @@ class UserWallPostsNotifier extends StateNotifier<AsyncValue<List<WallPost>>> {
             author:users_global!wall_posts_author_id_fkey(username, avatar_global_url),
             user_likes:wall_post_likes(user_id)
           ''')
-          .eq('profile_user_id', userId)
+          .eq('profile_user_id', filter.userId)
+          .eq('community_id', filter.communityId)
           .order('created_at', ascending: false)
           .limit(50);
       
       // Fetch comments count for each post
       final postIds = (response as List).map((p) => p['id'] as String).toList();
+      final authorIds = (response as List).map((p) => p['author_id'] as String).toSet().toList();
+      
       final commentsCounts = <String, int>{};
+      final localProfiles = <String, Map<String, dynamic>>{};
       
-      if (postIds.isNotEmpty) {
-        final commentsResponse = await supabase
-            .from('wall_post_comments')
-            .select('post_id')
-            .inFilter('post_id', postIds);
-        
-        // Count comments per post
-        for (final comment in commentsResponse as List) {
-          final postId = comment['post_id'] as String;
-          commentsCounts[postId] = (commentsCounts[postId] ?? 0) + 1;
-        }
-      }
+      // Parallel fetch: Comments counts AND Local Profiles
+      await Future.wait([
+        // Fetch comments counts
+        Future(() async {
+          if (postIds.isNotEmpty) {
+            final commentsResponse = await supabase
+                .from('wall_post_comments')
+                .select('post_id')
+                .inFilter('post_id', postIds);
+            
+            for (final comment in commentsResponse as List) {
+              final postId = comment['post_id'] as String;
+              commentsCounts[postId] = (commentsCounts[postId] ?? 0) + 1;
+            }
+          }
+        }),
+        // Fetch local profiles for authors in this community
+        Future(() async {
+          if (authorIds.isNotEmpty) {
+             final profilesResponse = await supabase
+                 .from('community_members')
+                 .select('user_id, nickname, avatar_url')
+                 .eq('community_id', filter.communityId)
+                 .inFilter('user_id', authorIds);
+                 
+             for (final profile in profilesResponse as List) {
+               localProfiles[profile['user_id']] = profile;
+             }
+          }
+        }),
+      ]);
       
-      // Add comments_count to each post
+      // Inject local profile data into post response (override global author)
       for (final post in response as List) {
         post['comments_count'] = commentsCounts[post['id']] ?? 0;
+        
+        final authorId = post['author_id'];
+        final localProfile = localProfiles[authorId];
+        
+        if (localProfile != null) {
+          // If local profile exists, inject it into the 'author' map
+          // We modify the 'author' map which currently holds users_global data
+          if (post['author'] == null) post['author'] = <String, dynamic>{};
+          
+          if (localProfile['nickname'] != null) {
+            post['author']['username'] = localProfile['nickname'];
+          }
+          if (localProfile['avatar_url'] != null) {
+            post['author']['avatar_global_url'] = localProfile['avatar_url'];
+          }
+        }
       }
 
       print('📦 MURO: Recibidos ${(response as List).length} posts');
@@ -174,7 +272,8 @@ class UserWallPostsNotifier extends StateNotifier<AsyncValue<List<WallPost>>> {
       }
 
       final payload = {
-        'profile_user_id': userId,
+        'profile_user_id': filter.userId,
+        'community_id': filter.communityId,
         'author_id': currentUser.id,
         'content': content.trim(),
       };
@@ -275,12 +374,13 @@ class UserWallPostsNotifier extends StateNotifier<AsyncValue<List<WallPost>>> {
 }
 
 /// Provider to manage wall posts for a specific user
+/// Provider to manage wall posts for a specific user in a community
 final userWallPostsProvider = StateNotifierProvider.family<
     UserWallPostsNotifier,
     AsyncValue<List<WallPost>>,
-    String
->((ref, userId) {
-  return UserWallPostsNotifier(userId, ref);
+    WallPostsFilter
+>((ref, filter) {
+  return UserWallPostsNotifier(filter, ref);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

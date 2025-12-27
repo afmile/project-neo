@@ -38,6 +38,7 @@ import '../../features/blog/presentation/screens/blog_detail_screen.dart';
 import '../../features/chat/domain/entities/chat_entity.dart';
 import '../../features/chat/presentation/screens/chat_conversation_screen.dart';
 import '../../features/chat/presentation/screens/create_private_room_screen.dart';
+import '../../features/community/presentation/screens/community_settings_screen.dart';
 
 /// Global navigator key
 final rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -243,6 +244,21 @@ final routerProvider = Provider<GoRouter>((ref) {
           return CommunityUserProfileScreen(
             userId: params['userId']!,
             communityId: params['communityId']!,
+          );
+        },
+      ),
+
+      // Community Settings
+      GoRoute(
+        path: '/community/:id/settings',
+        name: 'community-settings',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) {
+          final extras = state.extra as Map<String, dynamic>;
+          return CommunitySettingsScreen(
+            communityId: state.pathParameters['id']!,
+            communityName: extras['name'] as String,
+            themeColor: extras['color'] as Color,
           );
         },
       ),

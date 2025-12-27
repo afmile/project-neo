@@ -50,6 +50,7 @@ abstract class AuthRemoteDataSource {
     String? username,
     String? displayName,
     String? avatarUrl,
+    String? bio,
   });
   
   /// Delete account
@@ -326,6 +327,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     String? username,
     String? displayName,
     String? avatarUrl,
+    String? bio,
   }) async {
     try {
       final userId = _client.auth.currentUser?.id;
@@ -337,6 +339,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       if (username != null) updates['username'] = username;
       if (displayName != null) updates['display_name'] = displayName;
       if (avatarUrl != null) updates['avatar_global_url'] = avatarUrl;
+      if (bio != null) updates['bio'] = bio;
       
       if (updates.isNotEmpty) {
         await _client

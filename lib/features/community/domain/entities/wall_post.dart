@@ -20,6 +20,9 @@ enum WallPrivacyLevel {
 class WallPost extends Equatable {
   /// Unique post ID
   final String id;
+
+  /// Community ID this post belongs to
+  final String communityId;
   
   /// Author's user ID
   final String authorId;
@@ -47,6 +50,7 @@ class WallPost extends Equatable {
 
   const WallPost({
     required this.id,
+    required this.communityId,
     required this.authorId,
     required this.authorName,
     this.authorAvatar,
@@ -59,6 +63,7 @@ class WallPost extends Equatable {
 
   WallPost copyWith({
     String? id,
+    String? communityId,
     String? authorId,
     String? authorName,
     String? authorAvatar,
@@ -70,6 +75,7 @@ class WallPost extends Equatable {
   }) {
     return WallPost(
       id: id ?? this.id,
+      communityId: communityId ?? this.communityId,
       authorId: authorId ?? this.authorId,
       authorName: authorName ?? this.authorName,
       authorAvatar: authorAvatar ?? this.authorAvatar,
@@ -84,6 +90,7 @@ class WallPost extends Equatable {
   @override
   List<Object?> get props => [
         id,
+        communityId,
         authorId,
         authorName,
         authorAvatar,

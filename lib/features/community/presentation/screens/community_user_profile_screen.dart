@@ -9,6 +9,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../auth/presentation/screens/global_edit_profile_screen.dart';
+import 'local_edit_profile_screen.dart';
 import '../../domain/entities/user_title_tag.dart';
 import '../../domain/entities/wall_post.dart';
 import '../../domain/entities/pinned_content.dart';
@@ -213,19 +215,23 @@ class _CommunityUserProfileScreenState
 
   @override
   Widget build(BuildContext context) {
-    // 1. Get current user
-    final currentUser = ref.watch(currentUserProvider);
+    // 1. Get current user for ID check
+    final globalUser = ref.watch(currentUserProvider);
+    final isOwner = widget.userId == globalUser?.id;
     
-    // 2. Fetch target user if not current
-    final isCurrentUser = widget.userId == currentUser?.id;
-    final AsyncValue<UserEntity?> targetUserAsync = isCurrentUser 
-        ? AsyncValue.data(currentUser) 
-        : ref.watch(userProfileProvider(widget.userId));
+    // 2. Fetch the CONTEXTUAL profile (Global + Local override)
+    // We use userProfileProvider for BOTH self and others to ensure local overrides apply.
+    final AsyncValue<UserEntity?> profileAsync = ref.watch(
+      userProfileProvider(UserProfileParams(
+        userId: widget.userId, 
+        communityId: widget.communityId
+      ))
+    );
         
-    final displayUser = isCurrentUser ? currentUser : targetUserAsync.value;
+    final displayUser = profileAsync.value;
     
     // 3. Handle loading
-    if (targetUserAsync.isLoading && displayUser == null) {
+    if (profileAsync.isLoading && displayUser == null) {
       return const Scaffold(
         backgroundColor: Colors.black,
         body: Center(
@@ -239,7 +245,7 @@ class _CommunityUserProfileScreenState
       body: CustomScrollView(
         slivers: [
           // Header with avatar, name, tags, stats
-          _buildHeader(displayUser, isCurrentUser),
+          _buildHeader(displayUser, isOwner),
           
           // Tabs
           _buildTabBar(),
@@ -249,7 +255,7 @@ class _CommunityUserProfileScreenState
             child: TabBarView(
               controller: _tabController,
               children: [
-                _buildWallTab(displayUser, isCurrentUser),
+                _buildWallTab(displayUser, isOwner),
                 _buildActivityTab(),
               ],
             ),
@@ -281,42 +287,74 @@ class _CommunityUserProfileScreenState
         ),
         child: Column(
           children: [
-            // Top bar: 3-dot menu + NeoCoins
+            // Top bar: Actions + NeoCoins
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // 3-dot menu button
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, color: Colors.white),
-                  color: NeoColors.card,
-                  onSelected: (value) {
-                    if (value == 'privacy') {
-                      // TODO: Show privacy settings dialog
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Configuración de privacidad (próximamente)'),
-                          backgroundColor: NeoColors.accent,
-                        ),
-                      );
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem<String>(
-                      value: 'privacy',
-                      child: Row(
-                        children: [
-                          Icon(Icons.privacy_tip_outlined, color: NeoColors.accent, size: 20),
-                          const SizedBox(width: 12),
-                          Text(
-                            'Privacidad del Muro',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ],
+                // Left Side: Edit Button (if owner) & Menu
+                Row(
+                  children: [
+                    if (isOwner)
+                      IconButton(
+                        icon: const Icon(Icons.edit, color: NeoColors.accent),
+                        tooltip: 'Editar Perfil Local',
+                        onPressed: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => LocalEditProfileScreen(
+                                communityId: widget.communityId,
+                                initialNickname: user.username,
+                                initialAvatarUrl: user.avatarUrl,
+                                initialBio: user.bio,
+                              ),
+                            ),
+                          );
+                          // Refresh data
+                          setState(() {});
+                          ref.invalidate(userProfileProvider(UserProfileParams(
+                            userId: widget.userId,
+                            communityId: widget.communityId,
+                          )));
+                          // Refresh wall posts to show new avatar/name
+                          ref.invalidate(userWallPostsProvider(WallPostsFilter(
+                            userId: widget.userId, 
+                            communityId: widget.communityId
+                          )));
+                        },
                       ),
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert, color: Colors.white),
+                      color: NeoColors.card,
+                      onSelected: (value) {
+                        if (value == 'privacy') {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Configuración de privacidad (próximamente)'),
+                              backgroundColor: NeoColors.accent,
+                            ),
+                          );
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem<String>(
+                          value: 'privacy',
+                          child: Row(
+                            children: [
+                              Icon(Icons.privacy_tip_outlined, color: NeoColors.accent, size: 20),
+                              SizedBox(width: 12),
+                              Text(
+                                'Privacidad del Muro',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                // NeoCoins widget
+
+                // Right Side: NeoCoins widget
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -340,8 +378,8 @@ class _CommunityUserProfileScreenState
                       const SizedBox(width: 4),
                       Text(
                         '${user.neocoinsBalance.toInt()}', 
-                        style: TextStyle(
-                          color: const Color(0xFFFFD700),
+                        style: const TextStyle(
+                          color: Color(0xFFFFD700),
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
                         ),
@@ -387,7 +425,7 @@ class _CommunityUserProfileScreenState
             
             const SizedBox(height: 8),
             
-            // Username + Level badge (same row)
+            // Username + Level badge
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -423,12 +461,12 @@ class _CommunityUserProfileScreenState
             
             const SizedBox(height: 8),
             
-            // Title Tags - From Supabase
+            // Title Tags
             _buildTitleTags(),
             
             const SizedBox(height: 12),
 
-            // Bio (ADDED)
+            // Bio
             if (user.bio != null && user.bio!.isNotEmpty) ...[
                 Text(
                     user.bio!,
@@ -442,18 +480,16 @@ class _CommunityUserProfileScreenState
                 const SizedBox(height: 12),
             ],
             
-            // Stats - From Supabase
+            // Stats
             _buildStats(),
             
-    
-            // Follow button (hidden if viewing own profile)
+            // Follow button
             if (!isOwner) ...[
               const SizedBox(height: 12),
               FollowButton(
                 status: _friendshipStatus,
                 onPressed: () {
                   setState(() {
-                    // Cycle through states for demo
                     switch (_friendshipStatus) {
                       case FriendshipStatus.notFollowing:
                         _friendshipStatus = FriendshipStatus.followingThem;
@@ -520,9 +556,11 @@ class _CommunityUserProfileScreenState
   }
 
   Widget _buildWallTab(UserEntity? user, bool isOwner) {
-    return Container(
-      color: Colors.black,
-      child: ListView(
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Container(
+        color: Colors.black,
+        child: ListView(
         padding: const EdgeInsets.all(NeoSpacing.md),
         children: [
           // Input box (conditional)
@@ -534,6 +572,7 @@ class _CommunityUserProfileScreenState
           // Wall posts - From Supabase
           _buildWallPosts(isOwner),
         ],
+      ),
       ),
     );
   }
@@ -602,14 +641,10 @@ class _CommunityUserProfileScreenState
         ? 'Publica en tu muro'
         : 'Escribe en el muro de ${user?.username ?? '...'}';
     
-    return Container(
+    return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: 16,
         vertical: 8,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.grey[850],
-        borderRadius: BorderRadius.circular(30), // Pill shape
       ),
       child: Row(
         children: [
@@ -625,7 +660,12 @@ class _CommunityUserProfileScreenState
                   fontSize: 14,
                 ),
                 border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                errorBorder: InputBorder.none,
+                disabledBorder: InputBorder.none,
                 contentPadding: EdgeInsets.zero,
+                filled: false,
               ),
               maxLines: null,
               textInputAction: TextInputAction.send,
@@ -668,7 +708,10 @@ class _CommunityUserProfileScreenState
     });
     
     final success = await ref
-        .read(userWallPostsProvider(widget.userId).notifier)
+        .read(userWallPostsProvider(WallPostsFilter(
+          userId: widget.userId,
+          communityId: widget.communityId,
+        )).notifier)
         .createWallPost(content);
     
     setState(() {
@@ -854,7 +897,10 @@ class _CommunityUserProfileScreenState
 
   /// Build wall posts from Supabase
   Widget _buildWallPosts(bool isOwner) {
-    final wallPostsAsync = ref.watch(userWallPostsProvider(widget.userId));
+    final wallPostsAsync = ref.watch(userWallPostsProvider(WallPostsFilter(
+      userId: widget.userId,
+      communityId: widget.communityId,
+    )));
 
     return wallPostsAsync.when(
       loading: () => const Padding(
@@ -922,7 +968,10 @@ class _CommunityUserProfileScreenState
               post: post,
               onLike: () {
                 ref
-                    .read(userWallPostsProvider(widget.userId).notifier)
+                    .read(userWallPostsProvider(WallPostsFilter(
+                      userId: widget.userId,
+                      communityId: widget.communityId,
+                    )).notifier)
                     .toggleLike(post.id);
               },
               onComment: () {
@@ -963,7 +1012,10 @@ class _CommunityUserProfileScreenState
                 
                 if (confirmed == true) {
                   await ref
-                      .read(userWallPostsProvider(widget.userId).notifier)
+                      .read(userWallPostsProvider(WallPostsFilter(
+                        userId: widget.userId,
+                        communityId: widget.communityId,
+                      )).notifier)
                       .deleteWallPost(post.id);
                 }
               },
@@ -1091,7 +1143,10 @@ class _CommunityUserProfileScreenState
                               
                               // Refresh posts to update comment count
                               await ref
-                                  .read(userWallPostsProvider(widget.userId).notifier)
+                                  .read(userWallPostsProvider(WallPostsFilter(
+                                    userId: widget.userId,
+                                    communityId: widget.communityId,
+                                  )).notifier)
                                   .refresh();
                               
                               if (context.mounted) {

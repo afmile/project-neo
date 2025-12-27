@@ -58,6 +58,7 @@ abstract class AuthRepository {
     String? username,
     String? displayName,
     String? avatarUrl,
+    String? bio,
   });
   
   /// Delete account

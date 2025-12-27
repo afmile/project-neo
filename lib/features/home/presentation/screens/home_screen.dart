@@ -5,6 +5,7 @@ import '../../../../core/theme/neo_theme.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../community/presentation/providers/community_providers.dart';
 import '../../../community/presentation/screens/create_community_screen.dart'; // CommunityWizardScreen
+import '../../../auth/presentation/screens/global_edit_profile_screen.dart';
 import '../providers/home_providers.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../features/chat/presentation/screens/global_chats_screen.dart';
@@ -1118,6 +1119,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             const SizedBox(height: NeoSpacing.lg),
             _menuItem(Icons.person_outline_rounded, 'Mi Perfil', () {
               Navigator.pop(context);
+              // Navigate to global generic profile view if exists, or edit screen?
+              // User said "Edit global profile... enter general settings".
+              // Let's make "Mi Perfil" go to a read-only view or just add "Editar Pasaporte".
+            }),
+            _menuItem(Icons.edit_document, 'Editar Pasaporte (Global)', () {
+              Navigator.pop(context);
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const GlobalEditProfileScreen(),
+                ),
+              ).then((_) {
+                 // Refresh home to show new avatar if changed
+                 setState(() {});
+              });
             }),
             _menuItem(Icons.settings_outlined, 'Configuración', () {
               Navigator.pop(context);

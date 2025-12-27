@@ -153,16 +153,44 @@ class CommunityRemoteDataSourceImpl implements CommunityRemoteDataSource {
       final userId = _client.auth.currentUser?.id;
       if (userId == null) throw const NeoAuthException('No autenticado');
       
-      await _client.from('memberships').insert({
-        'user_id': userId,
-        'community_id': communityId,
-        'role': 'member',
-      });
-    } on PostgrestException catch (e) {
-      if (e.code == '23505') {
-        // Already a member
-        return;
+      // Check if membership exists (active or inactive)
+      final existing = await _client
+          .from('community_members')
+          .select()
+          .eq('user_id', userId)
+          .eq('community_id', communityId)
+          .maybeSingle();
+
+      if (existing != null) {
+        // Reactivate existing membership (preserve nickname/avatar)
+        await _client
+            .from('community_members')
+            .update({
+              'is_active': true,
+              'left_at': null,
+            })
+            .eq('user_id', userId)
+            .eq('community_id', communityId);
+      } else {
+        // Fetch global profile for defaults
+        final userGlobal = await _client
+            .from('users_global')
+            .select('username, avatar_global_url, bio')
+            .eq('id', userId)
+            .single();
+
+        // Create new membership with global defaults
+        await _client.from('community_members').insert({
+          'user_id': userId,
+          'community_id': communityId,
+          'role': 'member',
+          'nickname': userGlobal['username'],
+          'avatar_url': userGlobal['avatar_global_url'],
+          'bio': userGlobal['bio'],
+          'is_active': true,
+        });
       }
+    } on PostgrestException catch (e) {
       throw ServerException(e.message);
     } catch (e) {
       throw ServerException(e.toString());
@@ -175,9 +203,13 @@ class CommunityRemoteDataSourceImpl implements CommunityRemoteDataSource {
       final userId = _client.auth.currentUser?.id;
       if (userId == null) throw const NeoAuthException('No autenticado');
       
+      // Soft delete: set is_active = false
       await _client
-          .from('memberships')
-          .delete()
+          .from('community_members')
+          .update({
+            'is_active': false,
+            'left_at': DateTime.now().toIso8601String(),
+          })
           .eq('user_id', userId)
           .eq('community_id', communityId);
     } on PostgrestException catch (e) {

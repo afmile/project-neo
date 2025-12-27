@@ -165,6 +165,34 @@ class CommunityActionsNotifier extends StateNotifier<CommunityActionsState> {
       },
     );
   }
+
+  /// Update local profile
+  Future<bool> updateLocalProfile({
+    required String communityId,
+    String? nickname,
+    String? avatarUrl,
+    String? bio,
+  }) async {
+    state = state.copyWith(isLoading: true, error: null);
+    
+    final result = await _repository.updateLocalProfile(
+      communityId: communityId,
+      nickname: nickname,
+      avatarUrl: avatarUrl,
+      bio: bio,
+    );
+    
+    return result.fold(
+      (failure) {
+        state = state.copyWith(isLoading: false, error: failure.message);
+        return false;
+      },
+      (_) {
+        state = state.copyWith(isLoading: false);
+        return true;
+      },
+    );
+  }
   
   /// Check if user is member of a community
   bool isMember(String communityId) {

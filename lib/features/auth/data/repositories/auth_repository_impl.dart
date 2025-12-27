@@ -173,12 +173,14 @@ class AuthRepositoryImpl implements AuthRepository {
     String? username,
     String? displayName,
     String? avatarUrl,
+    String? bio,
   }) async {
     try {
       final user = await _remoteDataSource.updateProfile(
         username: username,
         displayName: displayName,
         avatarUrl: avatarUrl,
+        bio: bio,
       );
       return Right(user);
     } on NeoAuthException catch (e) {

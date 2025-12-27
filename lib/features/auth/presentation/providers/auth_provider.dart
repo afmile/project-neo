@@ -306,6 +306,41 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
   }
   
+  /// Update user profile
+  Future<bool> updateProfile({
+    String? username,
+    String? displayName,
+    String? avatarUrl,
+    String? bio,
+  }) async {
+    // Optimistic update or waiting? Let's wait.
+    state = state.copyWith(status: AuthStatus.loading);
+    
+    final result = await _repository.updateProfile(
+      username: username,
+      displayName: displayName,
+      avatarUrl: avatarUrl,
+      bio: bio,
+    );
+    
+    return result.fold(
+      (failure) {
+        state = state.copyWith(
+          status: AuthStatus.authenticated, // Revert status
+          error: failure.message,
+        );
+        return false;
+      },
+      (user) {
+        state = AuthState(
+          status: AuthStatus.authenticated,
+          user: user,
+        );
+        return true;
+      },
+    );
+  }
+
   /// Send password reset email
   Future<bool> sendPasswordReset(String email) async {
     final result = await _repository.sendPasswordResetEmail(email);
