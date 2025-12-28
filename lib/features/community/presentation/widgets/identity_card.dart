@@ -6,7 +6,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/theme/neo_theme.dart';
-import '../providers/home_vivo_providers.dart';
+import '../providers/local_identity_providers.dart';
 
 class IdentityCard extends StatelessWidget {
   final LocalIdentity? identity;

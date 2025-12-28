@@ -27,6 +27,7 @@ import '../providers/community_presence_provider.dart';
 import '../providers/community_members_provider.dart';
 import '../providers/wall_posts_paginated_provider.dart';
 import '../providers/home_vivo_providers.dart'; // NEW
+import '../providers/local_identity_providers.dart'; // Local identity provider
 import '../widgets/wall_post_card.dart';
 import '../widgets/sala_card.dart'; // NEW
 import '../widgets/post_list_tile.dart'; // NEW
@@ -65,7 +66,10 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this); // Changed from 4 to 5
+    _tabController = TabController(
+      length: 5,
+      vsync: this,
+    ); // Changed from 4 to 5
     isMember = !widget.isGuest;
   }
 
@@ -80,7 +84,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   Widget build(BuildContext context) {
     // Check if keyboard is visible
     final keyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
-    
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: _buildBody(),
@@ -125,10 +129,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   Widget _buildInicioView() {
     return NestedScrollView(
       headerSliverBuilder: (context, innerBoxIsScrolled) {
-        return [
-          _buildSliverAppBar(),
-          _buildSliverTabBar(),
-        ];
+        return [_buildSliverAppBar(), _buildSliverTabBar()];
       },
       body: _buildTabBarView(),
     );
@@ -194,8 +195,14 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       ListTile(
-                        leading: const Icon(Icons.notifications_outlined, color: Colors.white),
-                        title: const Text('Configuración', style: TextStyle(color: Colors.white)),
+                        leading: const Icon(
+                          Icons.notifications_outlined,
+                          color: Colors.white,
+                        ),
+                        title: const Text(
+                          'Configuración',
+                          style: TextStyle(color: Colors.white),
+                        ),
                         onTap: () {
                           Navigator.pop(context);
                           context.pushNamed(
@@ -203,7 +210,9 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                             pathParameters: {'id': widget.community.id},
                             extra: {
                               'name': widget.community.title,
-                              'color': _parseColor(widget.community.theme.primaryColor),
+                              'color': _parseColor(
+                                widget.community.theme.primaryColor,
+                              ),
                             },
                           );
                         },
@@ -272,10 +281,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                     height: 70,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.white,
-                        width: 2.5,
-                      ),
+                      border: Border.all(color: Colors.white, width: 2.5),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.3),
@@ -328,18 +334,20 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                               communityMembersProvider(widget.community.id),
                             );
                             final onlineCount = presenceState.onlineCount;
-                            
+
                             // Get avatars of online users
                             final onlineAvatars = membersAsync.when(
                               data: (members) => members
-                                  .where((m) => presenceState.isUserOnline(m.id))
+                                  .where(
+                                    (m) => presenceState.isUserOnline(m.id),
+                                  )
                                   .take(3)
                                   .map((m) => m.avatarUrl ?? '')
                                   .toList(),
                               loading: () => <String>[],
                               error: (_, __) => <String>[],
                             );
-                            
+
                             return Row(
                               children: [
                                 const Icon(
@@ -490,11 +498,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
           ],
         ),
       ),
-      child: const Icon(
-        Icons.groups_rounded,
-        color: Colors.white,
-        size: 32,
-      ),
+      child: const Icon(Icons.groups_rounded, color: Colors.white, size: 32),
     );
   }
 
@@ -518,7 +522,9 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
           unselectedLabelStyle: NeoTextStyles.labelLarge,
           dividerColor: Colors.transparent, // Remove white separator line
           tabs: const [
-            Tab(text: 'Inicio'), // Changed from 'Destacados' to 'Inicio' (Home VIVO)
+            Tab(
+              text: 'Inicio',
+            ), // Changed from 'Destacados' to 'Inicio' (Home VIVO)
             Tab(text: 'Muro'),
             Tab(text: 'Blogs'),
             Tab(text: 'Chats'),
@@ -574,9 +580,56 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
     final channelsAsync = ref.watch(chatChannelsProvider(widget.community.id));
 
     return channelsAsync.when(
-      loading: () => const SizedBox.shrink(),
-      error: (error, stack) => const SizedBox.shrink(),
+      loading: () {
+        print('🔄 [HOME VIVO] Loading chat channels...');
+        return const Center(
+          child: Padding(
+            padding: EdgeInsets.all(16),
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        );
+      },
+      error: (error, stack) {
+        print('❌ [HOME VIVO] Error in chatChannelsProvider: $error');
+        print('   Stack: $stack');
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.red.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Colors.red.withValues(alpha: 0.3),
+                width: 1,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '⚠️ Error cargando salas',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  error.toString(),
+                  style: TextStyle(
+                    color: Colors.red.withValues(alpha: 0.8),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
       data: (channels) {
+        print('✅ [HOME VIVO] Received ${channels.length} channels');
         if (channels.isEmpty) {
           // Empty state
           return Padding(
@@ -685,15 +738,18 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                             room: CommunityChatRoomEntity(
                               id: channel.id,
                               communityId: widget.community.id,
+                              type: RoomType.public,
                               title: channel.title,
                               description: channel.description,
                               backgroundImageUrl: channel.backgroundImageUrl,
                               memberCount: channel.memberCount,
+                              lastMessageTime: DateTime.now(),
                               isPinned: channel.isPinned,
                               voiceEnabled: false, // V1: No voice
                               videoEnabled: false, // V1: No video
                               projectionEnabled: false, // V1: No projection
-                              createdAt: DateTime.now(), // Not critical for display
+                              createdAt:
+                                  DateTime.now(), // Not critical for display
                             ),
                           ),
                         ),
@@ -782,7 +838,8 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                             child: Image.network(
                               pinnedPost.coverImageUrl!,
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stack) => Container(),
+                              errorBuilder: (context, error, stack) =>
+                                  Container(),
                             ),
                           ),
                         ),
@@ -865,7 +922,9 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
 
   /// Section: "Actividad reciente" - Recent posts
   Widget _buildActividadRecienteSection() {
-    final recentPostsAsync = ref.watch(recentActivityProvider(widget.community.id));
+    final recentPostsAsync = ref.watch(
+      recentActivityProvider(widget.community.id),
+    );
 
     return recentPostsAsync.when(
       loading: () => const Center(
@@ -913,10 +972,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                         SizedBox(height: 4),
                         Text(
                           'Sé el primero en compartir algo',
-                          style: TextStyle(
-                            color: Colors.white54,
-                            fontSize: 13,
-                          ),
+                          style: TextStyle(color: Colors.white54, fontSize: 13),
                         ),
                       ],
                     ),
@@ -944,10 +1000,12 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
             ),
             const SizedBox(height: 12),
             // List of posts
-            ...posts.map((post) => PostListTile(
-                  post: post,
-                  onTap: () => _navigateToDetail(post),
-                )),
+            ...posts.map(
+              (post) => PostListTile(
+                post: post,
+                onTap: () => _navigateToDetail(post),
+              ),
+            ),
           ],
         );
       },
@@ -956,7 +1014,9 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
 
   /// Section: "Tu identidad aquí" - Local identity card
   Widget _buildIdentidadLocalSection() {
-    final identityAsync = ref.watch(myLocalIdentityProvider(widget.community.id));
+    final identityAsync = ref.watch(
+      myLocalIdentityProvider(widget.community.id),
+    );
 
     return identityAsync.when(
       loading: () => const SizedBox.shrink(),
@@ -984,11 +1044,11 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
               child: IdentityCard(
                 identity: identity,
                 onTap: () {
-                  // Navigate to user profile within community
-                  final currentUser = ref.read(currentUserProvider);
-                  if (currentUser != null) {
-                    context.push('/community/${widget.community.id}/profile/${currentUser.id}');
-                  }
+                  // Navigate to local identity screen
+                  context.goNamed(
+                    'local-identity',
+                    pathParameters: {'communityId': widget.community.id},
+                  );
                 },
               ),
             ),
@@ -1002,7 +1062,8 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   // LEGACY TAB METHODS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // Tab content - Legacy tabs  Widget _buildBlogsTab() {
+  // Tab content - Legacy tabs
+  Widget _buildBlogsTab() {
     return _buildRealFeedTab(PostType.blog);
   }
 
@@ -1012,7 +1073,9 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
 
   /// Build Muro tab with paginated wall posts (infinite scroll)
   Widget _buildMuroTab() {
-    final wallPostsAsync = ref.watch(wallPostsPaginatedProvider(widget.community.id));
+    final wallPostsAsync = ref.watch(
+      wallPostsPaginatedProvider(widget.community.id),
+    );
 
     return wallPostsAsync.when(
       loading: () => const Center(
@@ -1022,7 +1085,11 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline, size: 48, color: Colors.red.withValues(alpha: 0.5)),
+            Icon(
+              Icons.error_outline,
+              size: 48,
+              color: Colors.red.withValues(alpha: 0.5),
+            ),
             const SizedBox(height: 16),
             Text(
               'Error cargando posts: $error',
@@ -1032,9 +1099,15 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () {
-                ref.read(wallPostsPaginatedProvider(widget.community.id).notifier).refresh();
+                ref
+                    .read(
+                      wallPostsPaginatedProvider(widget.community.id).notifier,
+                    )
+                    .refresh();
               },
-              style: ElevatedButton.styleFrom(backgroundColor: NeoColors.accent),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: NeoColors.accent,
+              ),
               child: const Text('Reintentar'),
             ),
           ],
@@ -1076,57 +1149,70 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
           onNotification: (notification) {
             // Infinite scroll trigger using externalized threshold
             if (notification is ScrollEndNotification &&
-                notification.metrics.pixels >= 
-                    notification.metrics.maxScrollExtent * kInfiniteScrollThreshold) {
+                notification.metrics.pixels >=
+                    notification.metrics.maxScrollExtent *
+                        kInfiniteScrollThreshold) {
               if (!paginated.isLoadingMore && paginated.hasMore) {
                 print('🔄 Triggering loadNextPage via scroll');
-                ref.read(wallPostsPaginatedProvider(widget.community.id).notifier).loadNextPage();
+                ref
+                    .read(
+                      wallPostsPaginatedProvider(widget.community.id).notifier,
+                    )
+                    .loadNextPage();
               }
             }
             return false;
           },
           child: ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              itemCount: paginated.posts.length + (paginated.isLoadingMore ? 1 : 0),
-              itemBuilder: (context, index) {
-                // Loading indicator at bottom
-                if (index == paginated.posts.length) {
-                  return const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: NeoColors.accent,
-                      ),
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            itemCount:
+                paginated.posts.length + (paginated.isLoadingMore ? 1 : 0),
+            itemBuilder: (context, index) {
+              // Loading indicator at bottom
+              if (index == paginated.posts.length) {
+                return const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: NeoColors.accent,
                     ),
-                  );
-                }
-
-                final post = paginated.posts[index];
-                final currentUserId = ref.read(currentUserProvider)?.id;
-
-                return WallPostCard(
-                  post: post,
-                  canDelete: post.authorId == currentUserId,
-                  onLike: () {
-                    ref.read(wallPostsPaginatedProvider(widget.community.id).notifier).toggleLike(post.id);
-                  },
-                  onDelete: () async {
-                    // TODO: Implement delete
-                    print('Delete post: ${post.id}');
-                  },
+                  ),
                 );
-              },
-            ),
+              }
+
+              final post = paginated.posts[index];
+              final currentUserId = ref.read(currentUserProvider)?.id;
+
+              return WallPostCard(
+                post: post,
+                canDelete: post.authorId == currentUserId,
+                onLike: () {
+                  ref
+                      .read(
+                        wallPostsPaginatedProvider(
+                          widget.community.id,
+                        ).notifier,
+                      )
+                      .toggleLike(post.id);
+                },
+                onDelete: () async {
+                  // TODO: Implement delete
+                  print('Delete post: ${post.id}');
+                },
+              );
+            },
           ),
         );
+      },
+    );
+  }
 
   /// Build feed tab using real Supabase data
   Widget _buildRealFeedTab(PostType? typeFilter) {
-    final feedState = ref.watch(feedProvider((
-      communityId: widget.community.id,
-      typeFilter: typeFilter,
-    )));
+    final feedState = ref.watch(
+      feedProvider((communityId: widget.community.id, typeFilter: typeFilter)),
+    );
 
     if (feedState.isLoading && feedState.posts.isEmpty) {
       return const Center(
@@ -1139,7 +1225,11 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline, size: 48, color: Colors.red.withOpacity(0.5)),
+            Icon(
+              Icons.error_outline,
+              size: 48,
+              color: Colors.red.withOpacity(0.5),
+            ),
             const SizedBox(height: 16),
             Text(
               feedState.error!,
@@ -1147,10 +1237,14 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
             ),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () => ref.read(feedProvider((
-                communityId: widget.community.id,
-                typeFilter: typeFilter,
-              )).notifier).refresh(),
+              onPressed: () => ref
+                  .read(
+                    feedProvider((
+                      communityId: widget.community.id,
+                      typeFilter: typeFilter,
+                    )).notifier,
+                  )
+                  .refresh(),
               child: const Text('Reintentar'),
             ),
           ],
@@ -1164,11 +1258,11 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              typeFilter == null 
+              typeFilter == null
                   ? Icons.grid_view_outlined
-                  : typeFilter == PostType.blog 
-                      ? Icons.article_outlined 
-                      : Icons.menu_book_outlined,
+                  : typeFilter == PostType.blog
+                  ? Icons.article_outlined
+                  : Icons.menu_book_outlined,
               size: 64,
               color: Colors.white.withOpacity(0.2),
             ),
@@ -1184,9 +1278,8 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
             ),
             const SizedBox(height: 8),
             TextButton(
-              onPressed: () => _navigateToCreateContent(
-                typeFilter ?? PostType.blog,
-              ),
+              onPressed: () =>
+                  _navigateToCreateContent(typeFilter ?? PostType.blog),
               child: const Text('Crear el primero'),
             ),
           ],
@@ -1195,10 +1288,14 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
     }
 
     return RefreshIndicator(
-      onRefresh: () => ref.read(feedProvider((
-        communityId: widget.community.id,
-        typeFilter: typeFilter,
-      )).notifier).refresh(),
+      onRefresh: () => ref
+          .read(
+            feedProvider((
+              communityId: widget.community.id,
+              typeFilter: typeFilter,
+            )).notifier,
+          )
+          .refresh(),
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: feedState.posts.length + (feedState.hasMore ? 1 : 0),
@@ -1206,10 +1303,14 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
           if (index >= feedState.posts.length) {
             // Load more trigger
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              ref.read(feedProvider((
-                communityId: widget.community.id,
-                typeFilter: typeFilter,
-              )).notifier).loadMore();
+              ref
+                  .read(
+                    feedProvider((
+                      communityId: widget.community.id,
+                      typeFilter: typeFilter,
+                    )).notifier,
+                  )
+                  .loadMore();
             });
             return const Center(
               child: Padding(
@@ -1229,11 +1330,13 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   Widget _buildPostCard(PostEntity post) {
     // Check if this post is rejected and belongs to current user
     final currentUserId = ref.read(currentUserProvider)?.id;
-    final isOwnRejectedPost = post.moderationStatus == ModerationStatus.rejected 
-        && post.authorId == currentUserId;
-    final isPending = post.moderationStatus == ModerationStatus.pending 
-        && post.authorId == currentUserId;
-        
+    final isOwnRejectedPost =
+        post.moderationStatus == ModerationStatus.rejected &&
+        post.authorId == currentUserId;
+    final isPending =
+        post.moderationStatus == ModerationStatus.pending &&
+        post.authorId == currentUserId;
+
     return GestureDetector(
       onTap: () => _navigateToDetail(post),
       child: Container(
@@ -1241,11 +1344,11 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
         decoration: BoxDecoration(
           color: const Color(0xFF1A1A2E),
           borderRadius: BorderRadius.circular(16),
-          border: isOwnRejectedPost 
+          border: isOwnRejectedPost
               ? Border.all(color: Colors.red.withOpacity(0.7), width: 2)
-              : isPending 
-                  ? Border.all(color: Colors.amber.withOpacity(0.5), width: 1)
-                  : null,
+              : isPending
+              ? Border.all(color: Colors.amber.withOpacity(0.5), width: 1)
+              : null,
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.3),
@@ -1261,14 +1364,23 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
             if (isOwnRejectedPost)
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.red.withOpacity(0.15),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(14),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.visibility_off, color: Colors.red.shade300, size: 16),
+                    Icon(
+                      Icons.visibility_off,
+                      color: Colors.red.shade300,
+                      size: 16,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -1283,7 +1395,11 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                     if (post.aiFlaggedReason != null)
                       Tooltip(
                         message: post.aiFlaggedReason!,
-                        child: Icon(Icons.info_outline, color: Colors.red.shade300, size: 16),
+                        child: Icon(
+                          Icons.info_outline,
+                          color: Colors.red.shade300,
+                          size: 16,
+                        ),
                       ),
                   ],
                 ),
@@ -1292,16 +1408,25 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
             if (isPending)
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.amber.withOpacity(0.15),
                   borderRadius: BorderRadius.vertical(
-                    top: isOwnRejectedPost ? Radius.zero : const Radius.circular(14),
+                    top: isOwnRejectedPost
+                        ? Radius.zero
+                        : const Radius.circular(14),
                   ),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.schedule, color: Colors.amber.shade300, size: 16),
+                    Icon(
+                      Icons.schedule,
+                      color: Colors.amber.shade300,
+                      size: 16,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'Pendiente de revisión',
@@ -1318,7 +1443,9 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
             if (post.coverImageUrl != null)
               ClipRRect(
                 borderRadius: BorderRadius.vertical(
-                  top: (isOwnRejectedPost || isPending) ? Radius.zero : const Radius.circular(16),
+                  top: (isOwnRejectedPost || isPending)
+                      ? Radius.zero
+                      : const Radius.circular(16),
                 ),
                 child: Image.network(
                   post.coverImageUrl!,
@@ -1328,7 +1455,11 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                   errorBuilder: (_, __, ___) => Container(
                     height: 140,
                     color: const Color(0xFF6366F1).withOpacity(0.3),
-                    child: const Icon(Icons.image, color: Colors.white54, size: 48),
+                    child: const Icon(
+                      Icons.image,
+                      color: Colors.white54,
+                      size: 48,
+                    ),
                   ),
                 ),
               ),
@@ -1339,7 +1470,10 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                 children: [
                   // Type badge
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: _getTypeBadgeColor(post.postType),
                       borderRadius: BorderRadius.circular(12),
@@ -1391,7 +1525,10 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                         child: post.authorAvatarUrl == null
                             ? Text(
                                 (post.authorUsername ?? 'U')[0].toUpperCase(),
-                                style: const TextStyle(color: Colors.white, fontSize: 10),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                ),
                               )
                             : null,
                       ),
@@ -1410,14 +1547,21 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                         child: Row(
                           children: [
                             Icon(
-                              post.isLikedByCurrentUser ? Icons.favorite : Icons.favorite_border,
-                              color: post.isLikedByCurrentUser ? Colors.red : Colors.white54,
+                              post.isLikedByCurrentUser
+                                  ? Icons.favorite
+                                  : Icons.favorite_border,
+                              color: post.isLikedByCurrentUser
+                                  ? Colors.red
+                                  : Colors.white54,
                               size: 18,
                             ),
                             const SizedBox(width: 4),
                             Text(
                               '${post.reactionsCount}',
-                              style: const TextStyle(color: Colors.white54, fontSize: 12),
+                              style: const TextStyle(
+                                color: Colors.white54,
+                                fontSize: 12,
+                              ),
                             ),
                           ],
                         ),
@@ -1426,11 +1570,18 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                       // Comments
                       Row(
                         children: [
-                          const Icon(Icons.chat_bubble_outline, color: Colors.white54, size: 18),
+                          const Icon(
+                            Icons.chat_bubble_outline,
+                            color: Colors.white54,
+                            size: 18,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             '${post.commentsCount}',
-                            style: const TextStyle(color: Colors.white54, fontSize: 12),
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
@@ -1446,19 +1597,20 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   }
 
   void _togglePostReaction(PostEntity post) {
-    ref.read(feedProvider((
-      communityId: widget.community.id,
-      typeFilter: null,
-    )).notifier).toggleReaction(post.id);
+    ref
+        .read(
+          feedProvider((
+            communityId: widget.community.id,
+            typeFilter: null,
+          )).notifier,
+        )
+        .toggleReaction(post.id);
   }
 
   void _navigateToDetail(PostEntity post) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ContentDetailScreen(
-          postId: post.id,
-          initialPost: post,
-        ),
+        builder: (_) => ContentDetailScreen(postId: post.id, initialPost: post),
       ),
     );
   }
@@ -1562,7 +1714,8 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
           padding: const EdgeInsets.all(16),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate(
-              (context, index) => _buildMemberItem('Usuario ${index + 1}', isLeader: index < 2),
+              (context, index) =>
+                  _buildMemberItem('Usuario ${index + 1}', isLeader: index < 2),
               childCount: 10,
             ),
           ),
@@ -1574,16 +1727,13 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   Widget _buildMemberItem(String name, {required bool isLeader}) {
     // Generate a mock user ID based on name
     final userId = 'user_${name.replaceAll(' ', '_').toLowerCase()}';
-    
+
     return InkWell(
       onTap: () {
         // Navigate to user profile
         Navigator.of(context).pushNamed(
           '/community-user-profile',
-          arguments: {
-            'userId': userId,
-            'communityId': widget.community.id,
-          },
+          arguments: {'userId': userId, 'communityId': widget.community.id},
         );
       },
       borderRadius: BorderRadius.circular(12),
@@ -1602,8 +1752,9 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
               height: 48,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: (isLeader ? Colors.amber : NeoColors.accent)
-                    .withValues(alpha: 0.2),
+                color: (isLeader ? Colors.amber : NeoColors.accent).withValues(
+                  alpha: 0.2,
+                ),
                 border: Border.all(
                   color: isLeader ? Colors.amber : NeoColors.accent,
                   width: 2,
@@ -1641,11 +1792,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                 ),
               ),
             const SizedBox(width: NeoSpacing.xs),
-            Icon(
-              Icons.chevron_right,
-              color: NeoColors.textTertiary,
-              size: 20,
-            ),
+            Icon(Icons.chevron_right, color: NeoColors.textTertiary, size: 20),
           ],
         ),
       ),
@@ -1664,7 +1811,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
     // Get current user ID
     final currentUser = ref.watch(currentUserProvider);
     final userId = currentUser?.id ?? 'current_user_id'; // Fallback for demo
-    
+
     // Render the actual CommunityUserProfileScreen
     return CommunityUserProfileScreen(
       userId: userId,
@@ -1782,7 +1929,6 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
     );
   }
 
-
   // ═══════════════════════════════════════════════════════════════════════════
   // GENERAL CREATE MODAL (BENTO GRID)
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1841,7 +1987,8 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                     Navigator.pop(context);
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => CreateChatScreen(communityId: widget.community.id),
+                        builder: (_) =>
+                            CreateChatScreen(communityId: widget.community.id),
                       ),
                     );
                   },
@@ -1923,11 +2070,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              icon,
-              size: 48,
-              color: Colors.white,
-            ),
+            Icon(icon, size: 48, color: Colors.white),
             const SizedBox(height: 12),
             Text(
               label,
@@ -2062,7 +2205,6 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
     );
   }
 
-
   // ═══════════════════════════════════════════════════════════════════════════
   // JOIN BAR (FOR GUESTS)
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2086,11 +2228,14 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
             child: ElevatedButton(
               onPressed: _joinCommunity,
               style: ElevatedButton.styleFrom(
-                backgroundColor: _parseColor(widget.community.theme.accentColor),
+                backgroundColor: _parseColor(
+                  widget.community.theme.accentColor,
+                ),
                 foregroundColor: Colors.white,
                 elevation: 8,
-                shadowColor: _parseColor(widget.community.theme.accentColor)
-                    .withValues(alpha: 0.5),
+                shadowColor: _parseColor(
+                  widget.community.theme.accentColor,
+                ).withValues(alpha: 0.5),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -2171,13 +2316,16 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
           return FadeTransition(
             opacity: animation,
             child: SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0.05, 0),
-                end: Offset.zero,
-              ).animate(CurvedAnimation(
-                parent: animation,
-                curve: Curves.easeOutCubic,
-              )),
+              position:
+                  Tween<Offset>(
+                    begin: const Offset(0.05, 0),
+                    end: Offset.zero,
+                  ).animate(
+                    CurvedAnimation(
+                      parent: animation,
+                      curve: Curves.easeOutCubic,
+                    ),
+                  ),
               child: child,
             ),
           );
@@ -2205,11 +2353,11 @@ class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   Widget build(
-      BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return Container(
-      color: Colors.black,
-      child: tabBar,
-    );
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return Container(color: Colors.black, child: tabBar);
   }
 
   @override

@@ -10,8 +10,8 @@ enum RoomType {
 class CommunityChatRoomEntity extends Equatable {
   final String id;
   final String communityId;
-  final String? creatorId; // ID of user who created the room
-  final String? creatorAvatarUrl; // Creator's avatar URL
+  final String? ownerId; // ID of user who owns the room
+  final String? ownerAvatarUrl; // Creator's avatar URL
   final RoomType type;
   final String title;
   final String? description;
@@ -35,8 +35,8 @@ class CommunityChatRoomEntity extends Equatable {
   const CommunityChatRoomEntity({
     required this.id,
     required this.communityId,
-    this.creatorId,
-    this.creatorAvatarUrl,
+    this.ownerId,
+    this.ownerAvatarUrl,
     required this.type,
     required this.title,
     this.description,
@@ -60,8 +60,8 @@ class CommunityChatRoomEntity extends Equatable {
   CommunityChatRoomEntity copyWith({
     String? id,
     String? communityId,
-    String? creatorId,
-    String? creatorAvatarUrl,
+    String? ownerId,
+    String? ownerAvatarUrl,
     RoomType? type,
     String? title,
     String? description,
@@ -84,8 +84,8 @@ class CommunityChatRoomEntity extends Equatable {
     return CommunityChatRoomEntity(
       id: id ?? this.id,
       communityId: communityId ?? this.communityId,
-      creatorId: creatorId ?? this.creatorId,
-      creatorAvatarUrl: creatorAvatarUrl ?? this.creatorAvatarUrl,
+      ownerId: ownerId ?? this.ownerId,
+      ownerAvatarUrl: ownerAvatarUrl ?? this.ownerAvatarUrl,
       type: type ?? this.type,
       title: title ?? this.title,
       description: description ?? this.description,
@@ -111,8 +111,8 @@ class CommunityChatRoomEntity extends Equatable {
   List<Object?> get props => [
         id,
         communityId,
-        creatorId,
-        creatorAvatarUrl,
+        ownerId,
+        ownerAvatarUrl,
         type,
         title,
         description,

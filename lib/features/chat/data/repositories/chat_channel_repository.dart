@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/entities/community_chat_room_entity.dart';
 import '../models/community_chat_room_model.dart';
+import '../../../../core/supabase/schema/schema.dart';
 
 /// Repository for chat channel operations with Supabase
 class ChatChannelRepository {
@@ -13,44 +14,44 @@ class ChatChannelRepository {
   Future<List<CommunityChatRoomEntity>> fetchChannels(String communityId) async {
     try {
       final response = await _client
-          .from('chat_channels')
-          .select('*')
-          .eq('community_id', communityId)
-          .order('is_pinned', ascending: false)
-          .order('created_at', ascending: false);
+          .from(ChatChannelsSchema.table)
+          .select(ChatChannelsSchema.selectFull)
+          .eq(ChatChannelsSchema.communityId, communityId)
+          .order(ChatChannelsSchema.isPinned, ascending: false)
+          .order(ChatChannelsSchema.createdAt, ascending: false);
 
       final channels = <CommunityChatRoomEntity>[];
       
-      // Get unique creator IDs
-      final creatorIds = (response as List)
-          .map((json) => json['creator_id'] as String?)
+      // Get unique owner IDs
+      final ownerIds = (response as List)
+          .map((json) => json[ChatChannelsSchema.ownerId] as String?)
           .where((id) => id != null)
           .toSet()
           .toList();
       
-      // Fetch creator data in one query
-      Map<String, Map<String, dynamic>> creatorData = {};
-      if (creatorIds.isNotEmpty) {
+      // Fetch owner data in one query
+      Map<String, Map<String, dynamic>> ownerData = {};
+      if (ownerIds.isNotEmpty) {
         try {
-          final creatorsResponse = await _client
-              .from('users_global')
-              .select('id, avatar_url, username')
-              .inFilter('id', creatorIds);
+          final ownersResponse = await _client
+              .from(UsersGlobalSchema.table)
+              .select(UsersGlobalSchema.selectBasic)
+              .inFilter(UsersGlobalSchema.id, ownerIds);
           
-          for (var creator in creatorsResponse as List) {
-            creatorData[creator['id']] = creator;
+          for (var owner in ownersResponse as List) {
+            ownerData[owner[UsersGlobalSchema.id]] = owner;
           }
         } catch (e) {
-          print('⚠️ Error fetching creator data: $e');
+          print('⚠️ Error fetching owner data: $e');
         }
       }
       
-      // Parse channels with creator data
+      // Parse channels with owner data
       for (var json in response as List) {
         try {
-          final creatorId = json['creator_id'] as String?;
-          if (creatorId != null && creatorData.containsKey(creatorId)) {
-            json['creator'] = creatorData[creatorId];
+          final ownerId = json[ChatChannelsSchema.ownerId] as String?;
+          if (ownerId != null && ownerData.containsKey(ownerId)) {
+            json['owner'] = ownerData[ownerId];
           }
           
           final channel = CommunityChatRoomModel.fromSupabaseJson(json);
@@ -71,7 +72,7 @@ class ChatChannelRepository {
   /// Create a new chat channel
   Future<CommunityChatRoomEntity> createChannel({
     required String communityId,
-    required String creatorId,
+    required String ownerId,  // Changed from creatorId to match schema
     required String title,
     String? description,
     String? iconUrl,
@@ -81,17 +82,17 @@ class ChatChannelRepository {
     bool projectionEnabled = false,
   }) async {
     final response = await _client
-        .from('chat_channels')
+        .from(ChatChannelsSchema.table)
         .insert({
-          'community_id': communityId,
-          'creator_id': creatorId,
-          'title': title,
-          'description': description,
-          'icon_url': iconUrl,
-          'background_image_url': backgroundImageUrl,
-          'voice_enabled': voiceEnabled,
-          'video_enabled': videoEnabled,
-          'projection_enabled': projectionEnabled,
+          ChatChannelsSchema.communityId: communityId,
+          ChatChannelsSchema.ownerId: ownerId,
+          ChatChannelsSchema.title: title,
+          ChatChannelsSchema.description: description,
+          ChatChannelsSchema.iconUrl: iconUrl,
+          ChatChannelsSchema.backgroundImageUrl: backgroundImageUrl,
+          ChatChannelsSchema.voiceEnabled: voiceEnabled,
+          ChatChannelsSchema.videoEnabled: videoEnabled,
+          ChatChannelsSchema.projectionEnabled: projectionEnabled,
         })
         .select()
         .single();

@@ -77,7 +77,7 @@ class CommunityChatRoomNotifier extends StateNotifier<CommunityChatRoomState> {
     try {
       final newRoom = await _repository.createChannel(
         communityId: communityId,
-        creatorId: userId,
+        ownerId: userId,
         title: title,
         description: description,
         iconUrl: iconUrl,

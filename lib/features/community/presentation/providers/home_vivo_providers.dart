@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/entities/post_entity.dart';
 import '../../data/models/post_model.dart';
+import '../../../../core/supabase/schema/schema.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CHAT CHANNELS PROVIDER
@@ -27,18 +28,18 @@ class ChatChannelSimple {
     required this.title,
     this.description,
     this.backgroundImageUrl,
-    required this.memberCount,
-    required this.isPinned,
+    this.memberCount = 0,  // Default since column doesn't exist in DB
+    this.isPinned = false,
   });
 
   factory ChatChannelSimple.fromJson(Map<String, dynamic> json) {
     return ChatChannelSimple(
-      id: json['id'] as String,
-      title: json['title'] as String,
-      description: json['description'] as String?,
-      backgroundImageUrl: json['background_image_url'] as String?,
-      memberCount: json['member_count'] as int? ?? 0,
-      isPinned: json['is_pinned'] as bool? ?? false,
+      id: json[ChatChannelsSchema.id] as String,
+      title: json[ChatChannelsSchema.title] as String,
+      description: json[ChatChannelsSchema.description] as String?,
+      backgroundImageUrl: json[ChatChannelsSchema.backgroundImageUrl] as String?,
+      memberCount: 0,  // Column doesn't exist in DB
+      isPinned: json[ChatChannelsSchema.isPinned] as bool? ?? false,
     );
   }
 }
@@ -46,107 +47,42 @@ class ChatChannelSimple {
 /// Provider for chat channels (Home VIVO "Ahora mismo" section)
 /// 
 /// Returns up to 5 channels, ordered by: is_pinned DESC, created_at DESC
-final chatChannelsProvider = FutureProvider.family<List<ChatChannelSimple>, String>(
-  (ref, communityId) async {
+/// Changed to StreamProvider.autoDispose to ensure fresh data on each view
+final chatChannelsProvider = StreamProvider.autoDispose.family<List<ChatChannelSimple>, String>(
+  (ref, communityId) async* {
     final supabase = Supabase.instance.client;
 
     try {
       final response = await supabase
-          .from('chat_channels')
-          .select('id, title, description, background_image_url, member_count, is_pinned')
-          .eq('community_id', communityId)
-          .order('is_pinned', ascending: false)
-          .order('created_at', ascending: false)
+          .from(ChatChannelsSchema.table)
+          .select(ChatChannelsSchema.selectNow)
+          .eq(ChatChannelsSchema.communityId, communityId)
+          .order(ChatChannelsSchema.isPinned, ascending: false)
+          .order(ChatChannelsSchema.pinnedOrder, ascending: true)
+          .order(ChatChannelsSchema.createdAt, ascending: false)
           .limit(5);
 
-      return (response as List)
-          .map((json) => ChatChannelSimple.fromJson(json as Map<String, dynamic>))
+      print('🔍 [HOME VIVO] chatChannelsProvider response (community: $communityId):');
+      print('   Raw response: $response');
+      print('   Response length: ${(response as List).length}');
+      
+      final channels = (response as List)
+          .map((json) {
+            print('   - Channel: ${json[ChatChannelsSchema.title]} (id: ${json[ChatChannelsSchema.id]}, isPinned: ${json[ChatChannelsSchema.isPinned]})');
+            return ChatChannelSimple.fromJson(json as Map<String, dynamic>);
+          })
           .toList();
+
+      print('   Total channels parsed: ${channels.length}');
+      yield channels;
     } catch (e) {
       print('❌ Error loading chat channels: $e');
-      return [];
+      yield [];
     }
   },
 );
 
-// ═══════════════════════════════════════════════════════════════════════════
-// LOCAL IDENTITY PROVIDER
-// ═══════════════════════════════════════════════════════════════════════════
-
-/// Represents user's local identity in a community
-class LocalIdentity {
-  final String userId;
-  final String communityId;
-  final String displayName; // nickname or global username
-  final String? avatarUrl; // local or global avatar
-  final String? bio;
-  final String role;
-
-  const LocalIdentity({
-    required this.userId,
-    required this.communityId,
-    required this.displayName,
-    this.avatarUrl,
-    this.bio,
-    required this.role,
-  });
-
-  String get roleDisplayName {
-    switch (role) {
-      case 'owner':
-        return 'Dueño';
-      case 'agent':
-        return 'Agente';
-      case 'leader':
-        return 'Líder';
-      default:
-        return 'Miembro';
-    }
-  }
-}
-
-/// Provider for current user's local identity in community
-/// 
-/// Fetches from community_members with fallback to global profile
-final myLocalIdentityProvider = FutureProvider.family<LocalIdentity?, String>(
-  (ref, communityId) async {
-    final currentUser = ref.watch(currentUserProvider);
-    if (currentUser == null) return null;
-
-    final supabase = Supabase.instance.client;
-
-    try {
-      final response = await supabase
-          .from('community_members')
-          .select('''
-            user_id, community_id, nickname, avatar_url, bio, role,
-            user:users_global(username, avatar_global_url)
-          ''')
-          .eq('community_id', communityId)
-          .eq('user_id', currentUser.id)
-          .eq('is_active', true)
-          .maybeSingle();
-
-      if (response == null) return null;
-
-      final userData = response['user'] as Map<String, dynamic>?;
-      final globalUsername = userData?['username'] as String? ?? 'Usuario';
-      final globalAvatar = userData?['avatar_global_url'] as String?;
-
-      return LocalIdentity(
-        userId: response['user_id'] as String,
-        communityId: response['community_id'] as String,
-        displayName: response['nickname'] as String? ?? globalUsername,
-        avatarUrl: response['avatar_url'] as String? ?? globalAvatar,
-        bio: response['bio'] as String?,
-        role: response['role'] as String? ?? 'member',
-      );
-    } catch (e) {
-      print('❌ Error loading local identity: $e');
-      return null;
-    }
-  },
-);
+// LocalIdentity and myLocalIdentityProvider moved to local_identity_providers.dart
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PINNED POST PROVIDER

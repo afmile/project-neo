@@ -273,10 +273,12 @@ class ChatCatalogGrid extends ConsumerWidget {
               child: CircleAvatar(
                 radius: 18,
                 backgroundColor: NeoColors.accent,
-                backgroundImage: room.creatorAvatarUrl != null
-                    ? NetworkImage(room.creatorAvatarUrl!)
-                    : null,
-                child: room.creatorAvatarUrl == null
+                backgroundImage: room.ownerAvatarUrl != null
+                    ? NetworkImage(room.ownerAvatarUrl!)
+                    : (room.backgroundImageUrl != null
+                        ? NetworkImage(room.backgroundImageUrl!)
+                        : null) as ImageProvider?,
+                child: (room.ownerAvatarUrl == null && room.backgroundImageUrl == null)
                     ? const Icon(
                         Icons.person,
                         size: 20,

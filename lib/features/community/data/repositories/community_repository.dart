@@ -16,7 +16,7 @@ import '../../domain/entities/community_entity.dart';
 abstract class CommunityRepository {
   /// Get communities the current user owns or is a member of
   Future<Either<Failure, List<CommunityEntity>>> getUserCommunities();
-  
+
   /// Get all public communities for discovery
   Future<Either<Failure, List<CommunityEntity>>> discoverCommunities({
     String? searchQuery,
@@ -24,13 +24,13 @@ abstract class CommunityRepository {
     int limit = 20,
     int offset = 0,
   });
-  
+
   /// Get a single community by ID
   Future<Either<Failure, CommunityEntity>> getCommunityById(String id);
-  
+
   /// Get a single community by slug
   Future<Either<Failure, CommunityEntity>> getCommunityBySlug(String slug);
-  
+
   /// Create a new community
   Future<Either<Failure, CommunityEntity>> createCommunity({
     required String title,
@@ -41,7 +41,7 @@ abstract class CommunityRepository {
     CommunityTheme? theme,
     bool isPrivate = false,
   });
-  
+
   /// Update community details
   Future<Either<Failure, CommunityEntity>> updateCommunity({
     required String communityId,
@@ -52,20 +52,20 @@ abstract class CommunityRepository {
     CommunityTheme? theme,
     bool? isPrivate,
   });
-  
+
   /// Upload image to community storage bucket
   Future<Either<Failure, String>> uploadCommunityImage({
     required String communityId,
     required File imageFile,
     required String imageType, // 'icon' or 'banner'
   });
-  
+
   /// Check if slug is available
   Future<Either<Failure, bool>> isSlugAvailable(String slug);
-  
+
   /// Join a community
   Future<Either<Failure, void>> joinCommunity(String communityId);
-  
+
   /// Leave a community
   Future<Either<Failure, void>> leaveCommunity(String communityId);
 
@@ -105,11 +105,11 @@ abstract class CommunityRepository {
 
 class CommunityRepositoryImpl implements CommunityRepository {
   final SupabaseClient _supabase;
-  
+
   CommunityRepositoryImpl(this._supabase);
-  
+
   String? get _currentUserId => _supabase.auth.currentUser?.id;
-  
+
   @override
   Future<Either<Failure, List<CommunityEntity>>> getUserCommunities() async {
     try {
@@ -117,7 +117,7 @@ class CommunityRepositoryImpl implements CommunityRepository {
       if (userId == null) {
         return const Left(AuthFailure('Usuario no autenticado'));
       }
-      
+
       // Get communities where user is owner or member
       final response = await _supabase
           .from('communities')
@@ -127,17 +127,17 @@ class CommunityRepositoryImpl implements CommunityRepository {
           ''')
           .eq('community_members.user_id', userId)
           .order('created_at', ascending: false);
-      
+
       final communities = (response as List)
           .map((json) => _communityFromJson(json))
           .toList();
-      
+
       return Right(communities);
     } catch (e) {
       return Left(ServerFailure('Error cargando comunidades: $e'));
     }
   }
-  
+
   @override
   Future<Either<Failure, List<CommunityEntity>>> discoverCommunities({
     String? searchQuery,
@@ -151,25 +151,25 @@ class CommunityRepositoryImpl implements CommunityRepository {
           .select()
           .eq('status', 'active')
           .eq('is_private', false);
-      
+
       if (searchQuery != null && searchQuery.isNotEmpty) {
         query = query.ilike('title', '%$searchQuery%');
       }
-      
+
       final response = await query
           .order('member_count', ascending: false)
           .range(offset, offset + limit - 1);
-      
+
       final communities = (response as List)
           .map((json) => _communityFromJson(json))
           .toList();
-      
+
       return Right(communities);
     } catch (e) {
       return Left(ServerFailure('Error en descubrimiento: $e'));
     }
   }
-  
+
   @override
   Future<Either<Failure, CommunityEntity>> getCommunityById(String id) async {
     try {
@@ -178,28 +178,30 @@ class CommunityRepositoryImpl implements CommunityRepository {
           .select()
           .eq('id', id)
           .single();
-      
+
       return Right(_communityFromJson(response));
     } catch (e) {
       return Left(ServerFailure('Comunidad no encontrada: $e'));
     }
   }
-  
+
   @override
-  Future<Either<Failure, CommunityEntity>> getCommunityBySlug(String slug) async {
+  Future<Either<Failure, CommunityEntity>> getCommunityBySlug(
+    String slug,
+  ) async {
     try {
       final response = await _supabase
           .from('communities')
           .select()
           .eq('slug', slug)
           .single();
-      
+
       return Right(_communityFromJson(response));
     } catch (e) {
       return Left(ServerFailure('Comunidad no encontrada: $e'));
     }
   }
-  
+
   @override
   Future<Either<Failure, CommunityEntity>> createCommunity({
     required String title,
@@ -215,7 +217,7 @@ class CommunityRepositoryImpl implements CommunityRepository {
       if (userId == null) {
         return const Left(AuthFailure('Usuario no autenticado'));
       }
-      
+
       final data = {
         'owner_id': userId,
         'title': title,
@@ -227,23 +229,23 @@ class CommunityRepositoryImpl implements CommunityRepository {
         'is_private': isPrivate,
         'member_count': 1, // Owner is first member
       };
-      
+
       // Insert community
       final response = await _supabase
           .from('communities')
           .insert(data)
           .select()
           .single();
-      
+
       final community = _communityFromJson(response);
-      
+
       // Auto-join owner as member with role 'owner'
       await _supabase.from('community_members').insert({
         'user_id': userId,
         'community_id': community.id,
         'role': 'owner',
       });
-      
+
       return Right(community);
     } on PostgrestException catch (e) {
       if (e.code == '23505') {
@@ -254,7 +256,7 @@ class CommunityRepositoryImpl implements CommunityRepository {
       return Left(ServerFailure('Error creando comunidad: $e'));
     }
   }
-  
+
   @override
   Future<Either<Failure, CommunityEntity>> updateCommunity({
     required String communityId,
@@ -273,20 +275,20 @@ class CommunityRepositoryImpl implements CommunityRepository {
       if (bannerUrl != null) data['banner_url'] = bannerUrl;
       if (theme != null) data['theme_config'] = theme.toJson();
       if (isPrivate != null) data['is_private'] = isPrivate;
-      
+
       final response = await _supabase
           .from('communities')
           .update(data)
           .eq('id', communityId)
           .select()
           .single();
-      
+
       return Right(_communityFromJson(response));
     } catch (e) {
       return Left(ServerFailure('Error actualizando comunidad: $e'));
     }
   }
-  
+
   @override
   Future<Either<Failure, String>> uploadCommunityImage({
     required String communityId,
@@ -296,21 +298,25 @@ class CommunityRepositoryImpl implements CommunityRepository {
     try {
       final fileName = '${communityId}_$imageType.jpg';
       final path = 'communities/$communityId/$fileName';
-      
+
       await _supabase.storage
           .from('community-media')
-          .upload(path, imageFile, fileOptions: const FileOptions(upsert: true));
-      
+          .upload(
+            path,
+            imageFile,
+            fileOptions: const FileOptions(upsert: true),
+          );
+
       final publicUrl = _supabase.storage
           .from('community-media')
           .getPublicUrl(path);
-      
+
       return Right(publicUrl);
     } catch (e) {
       return Left(ServerFailure('Error subiendo imagen: $e'));
     }
   }
-  
+
   @override
   Future<Either<Failure, bool>> isSlugAvailable(String slug) async {
     try {
@@ -319,13 +325,13 @@ class CommunityRepositoryImpl implements CommunityRepository {
           .select('id')
           .eq('slug', slug.toLowerCase())
           .maybeSingle();
-      
+
       return Right(response == null);
     } catch (e) {
       return Left(ServerFailure('Error verificando slug: $e'));
     }
   }
-  
+
   @override
   Future<Either<Failure, void>> joinCommunity(String communityId) async {
     try {
@@ -333,7 +339,7 @@ class CommunityRepositoryImpl implements CommunityRepository {
       if (userId == null) {
         return const Left(AuthFailure('Usuario no autenticado'));
       }
-      
+
       // Check if membership exists
       final existing = await _supabase
           .from('community_members')
@@ -346,10 +352,7 @@ class CommunityRepositoryImpl implements CommunityRepository {
         // Reactivate
         await _supabase
             .from('community_members')
-            .update({
-              'is_active': true,
-              'left_at': null,
-            })
+            .update({'is_active': true, 'left_at': null})
             .eq('user_id', userId)
             .eq('community_id', communityId);
       } else {
@@ -371,7 +374,7 @@ class CommunityRepositoryImpl implements CommunityRepository {
           'is_active': true,
         });
       }
-      
+
       // Increment member count (Not needed if DB Trigger handles it, but keeping for safety if trigger logic is complex/missing)
       // Note: Migration 014 adds a trigger for is_active updates, so this might be redundant for updates,
       // but strictly speaking, standard insert triggers usually handle inserts.
@@ -379,20 +382,20 @@ class CommunityRepositoryImpl implements CommunityRepository {
       // However, if we do it here AND DB does it, we might double count?
       // With migration 014 trigger, update is handled. Insert usually has its own trigger.
       // Let's assume existing triggers handle member_count on INSERT/DELETE/UPDATE.
-      // Removing explicit RPC call to avoid double counting if triggers exist, 
-      // OR keeping it if no triggers exist. 
+      // Removing explicit RPC call to avoid double counting if triggers exist,
+      // OR keeping it if no triggers exist.
       // The previous code called 'increment_member_count'.
       // Safest is to let the DB handle it if we trust our triggers.
-      // Given I just added a trigger in 014, I should trust it for updates. 
-      // For inserts, usually there is a trigger too. 
+      // Given I just added a trigger in 014, I should trust it for updates.
+      // For inserts, usually there is a trigger too.
       // I will REMOVE the RPC call to be consistent with modern Supabase practices (Active/Passive implies triggers).
-      
+
       return const Right(null);
     } catch (e) {
       return Left(ServerFailure('Error uniéndose a comunidad: $e'));
     }
   }
-  
+
   @override
   Future<Either<Failure, void>> leaveCommunity(String communityId) async {
     try {
@@ -400,7 +403,7 @@ class CommunityRepositoryImpl implements CommunityRepository {
       if (userId == null) {
         return const Left(AuthFailure('Usuario no autenticado'));
       }
-      
+
       // Soft delete
       await _supabase
           .from('community_members')
@@ -410,9 +413,9 @@ class CommunityRepositoryImpl implements CommunityRepository {
           })
           .eq('user_id', userId)
           .eq('community_id', communityId);
-      
+
       // Member count decrement handled by DB trigger on is_active change (added in 014)
-      
+
       return const Right(null);
     } catch (e) {
       return Left(ServerFailure('Error saliendo de comunidad: $e'));
@@ -436,7 +439,7 @@ class CommunityRepositoryImpl implements CommunityRepository {
       if (nickname != null) updates['nickname'] = nickname;
       if (avatarUrl != null) updates['avatar_url'] = avatarUrl;
       if (bio != null) updates['bio'] = bio;
-      
+
       if (updates.isEmpty) return const Right(null);
 
       await _supabase
@@ -477,15 +480,15 @@ class CommunityRepositoryImpl implements CommunityRepository {
 
       return response['notification_settings'] as Map<String, dynamic>;
     } catch (e) {
-       // Return default on error to allow safe fail
-       return {
-          'enabled': true,
-          'chat': true,
-          'mentions': true,
-          'announcements': true,
-          'wall_posts': false,
-          'reactions': true,
-        };
+      // Return default on error to allow safe fail
+      return {
+        'enabled': true,
+        'chat': true,
+        'mentions': true,
+        'announcements': true,
+        'wall_posts': false,
+        'reactions': true,
+      };
     }
   }
 
@@ -500,7 +503,7 @@ class CommunityRepositoryImpl implements CommunityRepository {
       print('   Community: $communityId');
       print('   User: $userId');
       print('   Settings: $settings');
-      
+
       // Check membership first
       final memberCheck = await _supabase
           .from('community_members')
@@ -523,9 +526,8 @@ class CommunityRepositoryImpl implements CommunityRepository {
           .update({'notification_settings': settings})
           .eq('community_id', communityId)
           .eq('user_id', userId);
-      
+
       print('✅ Settings actualizados correctamente');
-          
     } catch (e) {
       print('❌ Error en repository: $e');
       throw Exception("Failed to update notification settings: $e");
@@ -541,7 +543,7 @@ class CommunityRepositoryImpl implements CommunityRepository {
   }) async {
     try {
       print('🔄 Fetching paginated wall posts for community: $communityId');
-      
+
       // Build base query
       var query = _supabase
           .from('wall_posts')
@@ -551,38 +553,41 @@ class CommunityRepositoryImpl implements CommunityRepository {
             user_likes:wall_post_likes(user_id)
           ''')
           .eq('community_id', communityId);
-      
+
       // Apply cursor if provided (compound cursor: created_at DESC, then id DESC)
       if (cursorCreatedAt != null && cursorId != null) {
         // Posts with created_at < cursor OR (created_at = cursor AND id < cursor_id)
         query = query.or(
-            'created_at.lt.$cursorCreatedAt,'
-            'and(created_at.eq.$cursorCreatedAt,id.lt.$cursorId)'
+          'created_at.lt.$cursorCreatedAt,'
+          'and(created_at.eq.$cursorCreatedAt,id.lt.$cursorId)',
         );
       }
-      
+
       // Execute query with ordering
       final response = await query
           .order('created_at', ascending: false)
           .order('id', ascending: false)
           .limit(limit);
-      
+
       final posts = response as List;
-      
+
       if (posts.isEmpty) {
         print('✅ No posts found');
         return const Right([]);
       }
-      
+
       print('📦 Fetched ${posts.length} posts');
-      
+
       // Extract IDs for batch fetching
       final postIds = posts.map((p) => p['id'] as String).toList();
-      final authorIds = posts.map((p) => p['author_id'] as String).toSet().toList();
-      
+      final authorIds = posts
+          .map((p) => p['author_id'] as String)
+          .toSet()
+          .toList();
+
       final commentsCounts = <String, int>{};
       final localProfiles = <String, Map<String, dynamic>>{};
-      
+
       // Parallel fetch: Comments counts AND Local Profiles
       await Future.wait([
         // Fetch comments counts
@@ -592,7 +597,7 @@ class CommunityRepositoryImpl implements CommunityRepository {
                 .from('wall_post_comments')
                 .select('post_id')
                 .inFilter('post_id', postIds);
-            
+
             for (final comment in commentsResponse as List) {
               final postId = comment['post_id'] as String;
               commentsCounts[postId] = (commentsCounts[postId] ?? 0) + 1;
@@ -607,25 +612,25 @@ class CommunityRepositoryImpl implements CommunityRepository {
                 .select('user_id, nickname, avatar_url')
                 .eq('community_id', communityId)
                 .inFilter('user_id', authorIds);
-                
+
             for (final profile in profilesResponse as List) {
               localProfiles[profile['user_id']] = profile;
             }
           }
         }),
       ]);
-      
+
       // Inject local profile data and comments count into posts
       for (final post in posts) {
         post['comments_count'] = commentsCounts[post['id']] ?? 0;
-        
+
         final authorId = post['author_id'];
         final localProfile = localProfiles[authorId];
-        
+
         if (localProfile != null) {
           // Override global author data with local profile
           if (post['author'] == null) post['author'] = <String, dynamic>{};
-          
+
           if (localProfile['nickname'] != null) {
             post['author']['username'] = localProfile['nickname'];
           }
@@ -634,20 +639,20 @@ class CommunityRepositoryImpl implements CommunityRepository {
           }
         }
       }
-      
+
       print('✅ Posts processed with local overrides');
-      return Right(posts);
+      return Right(List<Map<String, dynamic>>.from(posts));
     } catch (e, stackTrace) {
       print('❌ Error fetching paginated wall posts: $e');
       print('📍 Stack trace: $stackTrace');
       return Left(ServerFailure('Error cargando posts: $e'));
     }
   }
-  
+
   // ═══════════════════════════════════════════════════════════════════════════
   // HELPERS
   // ═══════════════════════════════════════════════════════════════════════════
-  
+
   CommunityEntity _communityFromJson(Map<String, dynamic> json) {
     return CommunityEntity(
       id: json['id'] as String,
@@ -658,7 +663,9 @@ class CommunityRepositoryImpl implements CommunityRepository {
       iconUrl: json['icon_url'] as String?,
       bannerUrl: json['banner_url'] as String?,
       theme: json['theme_config'] != null
-          ? CommunityTheme.fromJson(json['theme_config'] as Map<String, dynamic>)
+          ? CommunityTheme.fromJson(
+              json['theme_config'] as Map<String, dynamic>,
+            )
           : const CommunityTheme(),
       isNsfw: json['is_nsfw_flag'] as bool? ?? false,
       status: _parseStatus(json['status'] as String?),
@@ -666,16 +673,22 @@ class CommunityRepositoryImpl implements CommunityRepository {
       isPrivate: json['is_private'] as bool? ?? false,
       inviteOnly: json['invite_only'] as bool? ?? false,
       createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String? ?? json['created_at'] as String),
+      updatedAt: DateTime.parse(
+        json['updated_at'] as String? ?? json['created_at'] as String,
+      ),
     );
   }
-  
+
   CommunityStatus _parseStatus(String? status) {
     switch (status) {
-      case 'shadowbanned': return CommunityStatus.shadowbanned;
-      case 'suspended': return CommunityStatus.suspended;
-      case 'archived': return CommunityStatus.archived;
-      default: return CommunityStatus.active;
+      case 'shadowbanned':
+        return CommunityStatus.shadowbanned;
+      case 'suspended':
+        return CommunityStatus.suspended;
+      case 'archived':
+        return CommunityStatus.archived;
+      default:
+        return CommunityStatus.active;
     }
   }
 }

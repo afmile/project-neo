@@ -303,9 +303,6 @@ class _CommunityUserProfileScreenState
                             MaterialPageRoute(
                               builder: (context) => LocalEditProfileScreen(
                                 communityId: widget.communityId,
-                                initialNickname: user.username,
-                                initialAvatarUrl: user.avatarUrl,
-                                initialBio: user.bio,
                               ),
                             ),
                           );
