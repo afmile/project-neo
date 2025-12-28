@@ -43,6 +43,34 @@ class ContentRepositoryImpl implements ContentRepository {
   }
   
   @override
+  Future<Either<Failure, List<PostEntity>>> getFeedPaginated({
+    required String communityId,
+    PostType? typeFilter,
+    required int limit,
+    bool? cursorIsPinned,
+    String? cursorCreatedAt,
+    String? cursorId,
+  }) async {
+    try {
+      final posts = await remoteDataSource.getFeedPaginated(
+        communityId: communityId,
+        typeFilter: typeFilter,
+        limit: limit,
+        cursorIsPinned: cursorIsPinned,
+        cursorCreatedAt: cursorCreatedAt,
+        cursorId: cursorId,
+      );
+      return Right(posts);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } on NeoAuthException catch (e) {
+      return Left(AuthFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+  
+  @override
   Future<Either<Failure, PostEntity>> getPostById(String postId) async {
     try {
       final post = await remoteDataSource.getPostById(postId);

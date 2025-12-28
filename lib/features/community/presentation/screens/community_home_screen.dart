@@ -25,7 +25,15 @@ import 'content_detail_screen.dart';
 import '../providers/content_providers.dart';
 import '../providers/community_presence_provider.dart';
 import '../providers/community_members_provider.dart';
+import '../providers/wall_posts_paginated_provider.dart';
+import '../providers/home_vivo_providers.dart'; // NEW
+import '../widgets/wall_post_card.dart';
+import '../widgets/sala_card.dart'; // NEW
+import '../widgets/post_list_tile.dart'; // NEW
+import '../widgets/identity_card.dart'; // NEW
 import 'community_studio_screen.dart';
+import '../../../chat/presentation/screens/chat_room_screen.dart'; // NEW
+import '../../../chat/domain/entities/community_chat_room_entity.dart'; // NEW
 
 class CommunityHomeScreen extends ConsumerStatefulWidget {
   final CommunityEntity community;
@@ -57,7 +65,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this); // Changed from 4 to 5
     isMember = !widget.isGuest;
   }
 
@@ -510,7 +518,8 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
           unselectedLabelStyle: NeoTextStyles.labelLarge,
           dividerColor: Colors.transparent, // Remove white separator line
           tabs: const [
-            Tab(text: 'Destacados'),
+            Tab(text: 'Inicio'), // Changed from 'Destacados' to 'Inicio' (Home VIVO)
+            Tab(text: 'Muro'),
             Tab(text: 'Blogs'),
             Tab(text: 'Chats'),
             Tab(text: 'Wikis'),
@@ -524,7 +533,8 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
     return TabBarView(
       controller: _tabController,
       children: [
-        _buildDestacadosTab(),
+        _buildHomeVivoTab(), // Changed from _buildDestacadosTab()
+        _buildMuroTab(),
         _buildBlogsTab(),
         ChatCatalogGrid(communityId: widget.community.id),
         _buildWikisTab(),
@@ -532,19 +542,584 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
     );
   }
 
-  // Tab content - All use real Supabase data
-  Widget _buildDestacadosTab() {
-    // Destacados shows ALL post types (no filter)
-    return _buildRealFeedTab(null);
+  // Tab content - Home VIVO (new landing experience)
+  Widget _buildHomeVivoTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(bottom: 80), // Space for FAB
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 16),
+          // 1. "Ahora mismo" - Active chat channels
+          _buildAhoraMismoSection(),
+          const SizedBox(height: 24),
+          // 2. "Destacado" - Pinned post (if exists)
+          _buildDestacadoSection(),
+          // 3. "Actividad reciente" - Recent posts
+          _buildActividadRecienteSection(),
+          const SizedBox(height: 24),
+          // 4. "Tu identidad aquí" - Local identity
+          _buildIdentidadLocalSection(),
+        ],
+      ),
+    );
   }
 
-  Widget _buildBlogsTab() {
+  // ═══════════════════════════════════════════════════════════════════════════
+  // HOME VIVO SECTIONS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Section: "Ahora mismo" - Active chat channels
+  Widget _buildAhoraMismoSection() {
+    final channelsAsync = ref.watch(chatChannelsProvider(widget.community.id));
+
+    return channelsAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (error, stack) => const SizedBox.shrink(),
+      data: (channels) {
+        if (channels.isEmpty) {
+          // Empty state
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.chat_bubble_outline,
+                    color: Colors.white.withValues(alpha: 0.5),
+                    size: 40,
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'No hay salas activas',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Crea la primera sala para conectar con la comunidad',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.6),
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Section Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    '🎯 Ahora mismo',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      // Navigate to Chats tab (index 3)
+                      _tabController.animateTo(3);
+                    },
+                    child: const Text(
+                      'Ver todas',
+                      style: TextStyle(
+                        color: NeoColors.accent,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Horizontal scroll of chat channels
+            SizedBox(
+              height: 140,
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                scrollDirection: Axis.horizontal,
+                itemCount: channels.length,
+                itemBuilder: (context, index) {
+                  final channel = channels[index];
+                  return SalaCard(
+                    title: channel.title,
+                    description: channel.description,
+                    backgroundImageUrl: channel.backgroundImageUrl,
+                    memberCount: channel.memberCount,
+                    onTap: () {
+                      // Navigate to chat room screen
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => ChatRoomScreen(
+                            room: CommunityChatRoomEntity(
+                              id: channel.id,
+                              communityId: widget.community.id,
+                              title: channel.title,
+                              description: channel.description,
+                              backgroundImageUrl: channel.backgroundImageUrl,
+                              memberCount: channel.memberCount,
+                              isPinned: channel.isPinned,
+                              voiceEnabled: false, // V1: No voice
+                              videoEnabled: false, // V1: No video
+                              projectionEnabled: false, // V1: No projection
+                              createdAt: DateTime.now(), // Not critical for display
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Section: "Destacado" - Pinned post hero card
+  Widget _buildDestacadoSection() {
+    final pinnedPostAsync = ref.watch(pinnedPostProvider(widget.community.id));
+
+    return pinnedPostAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (error, stack) => const SizedBox.shrink(),
+      data: (pinnedPost) {
+        if (pinnedPost == null) {
+          // No pinned post, hide section
+          return const SizedBox.shrink();
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Section Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    '📌 Destacado',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      // Navigate to Blogs tab (or any feed)
+                      _tabController.animateTo(2);
+                    },
+                    child: const Text(
+                      'Ver más',
+                      style: TextStyle(
+                        color: NeoColors.accent,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Hero pinned post card
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: GestureDetector(
+                onTap: () => _navigateToDetail(pinnedPost),
+                child: Container(
+                  height: 180,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: NeoColors.accent.withValues(alpha: 0.3),
+                      width: 2,
+                    ),
+                  ),
+                  child: Stack(
+                    children: [
+                      // Cover image if exists
+                      if (pinnedPost.coverImageUrl != null)
+                        Positioned.fill(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(
+                              pinnedPost.coverImageUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stack) => Container(),
+                            ),
+                          ),
+                        ),
+                      // Gradient overlay
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.black.withValues(alpha: 0.3),
+                                Colors.black.withValues(alpha: 0.8),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Content
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: NeoColors.accent.withValues(alpha: 0.3),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text(
+                                '📌 DESTACADO',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              pinnedPost.title ?? 'Sin título',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              pinnedPost.content ?? '',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.8),
+                                fontSize: 14,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Section: "Actividad reciente" - Recent posts
+  Widget _buildActividadRecienteSection() {
+    final recentPostsAsync = ref.watch(recentActivityProvider(widget.community.id));
+
+    return recentPostsAsync.when(
+      loading: () => const Center(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
+      error: (error, stack) => const SizedBox.shrink(),
+      data: (posts) {
+        if (posts.isEmpty) {
+          // Empty state
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.article_outlined,
+                    color: Colors.white.withValues(alpha: 0.5),
+                    size: 40,
+                  ),
+                  const SizedBox(width: 16),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Aún no hay actividad',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Sé el primero en compartir algo',
+                          style: TextStyle(
+                            color: Colors.white54,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Section Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: const Text(
+                '⚡ Actividad reciente',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // List of posts
+            ...posts.map((post) => PostListTile(
+                  post: post,
+                  onTap: () => _navigateToDetail(post),
+                )),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Section: "Tu identidad aquí" - Local identity card
+  Widget _buildIdentidadLocalSection() {
+    final identityAsync = ref.watch(myLocalIdentityProvider(widget.community.id));
+
+    return identityAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (error, stack) => const SizedBox.shrink(),
+      data: (identity) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Section Header
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                '👤 Tu identidad aquí',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Identity card
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: IdentityCard(
+                identity: identity,
+                onTap: () {
+                  // Navigate to user profile within community
+                  final currentUser = ref.read(currentUserProvider);
+                  if (currentUser != null) {
+                    context.push('/community/${widget.community.id}/profile/${currentUser.id}');
+                  }
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LEGACY TAB METHODS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Tab content - Legacy tabs  Widget _buildBlogsTab() {
     return _buildRealFeedTab(PostType.blog);
   }
 
   Widget _buildWikisTab() {
     return _buildRealFeedTab(PostType.wiki);
   }
+
+  /// Build Muro tab with paginated wall posts (infinite scroll)
+  Widget _buildMuroTab() {
+    final wallPostsAsync = ref.watch(wallPostsPaginatedProvider(widget.community.id));
+
+    return wallPostsAsync.when(
+      loading: () => const Center(
+        child: CircularProgressIndicator(color: NeoColors.accent),
+      ),
+      error: (error, stackTrace) => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline, size: 48, color: Colors.red.withValues(alpha: 0.5)),
+            const SizedBox(height: 16),
+            Text(
+              'Error cargando posts: $error',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                ref.read(wallPostsPaginatedProvider(widget.community.id).notifier).refresh();
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: NeoColors.accent),
+              child: const Text('Reintentar'),
+            ),
+          ],
+        ),
+      ),
+      data: (paginated) {
+        if (paginated.posts.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.forum_outlined,
+                  size: 64,
+                  color: Colors.white.withValues(alpha: 0.2),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No hay posts en el muro aún',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.5),
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Sé el primero en publicar',
+                  style: TextStyle(
+                    color: NeoColors.textSecondary,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            // Infinite scroll trigger using externalized threshold
+            if (notification is ScrollEndNotification &&
+                notification.metrics.pixels >= 
+                    notification.metrics.maxScrollExtent * kInfiniteScrollThreshold) {
+              if (!paginated.isLoadingMore && paginated.hasMore) {
+                print('🔄 Triggering loadNextPage via scroll');
+                ref.read(wallPostsPaginatedProvider(widget.community.id).notifier).loadNextPage();
+              }
+            }
+            return false;
+          },
+          child: ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: paginated.posts.length + (paginated.isLoadingMore ? 1 : 0),
+              itemBuilder: (context, index) {
+                // Loading indicator at bottom
+                if (index == paginated.posts.length) {
+                  return const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: NeoColors.accent,
+                      ),
+                    ),
+                  );
+                }
+
+                final post = paginated.posts[index];
+                final currentUserId = ref.read(currentUserProvider)?.id;
+
+                return WallPostCard(
+                  post: post,
+                  canDelete: post.authorId == currentUserId,
+                  onLike: () {
+                    ref.read(wallPostsPaginatedProvider(widget.community.id).notifier).toggleLike(post.id);
+                  },
+                  onDelete: () async {
+                    // TODO: Implement delete
+                    print('Delete post: ${post.id}');
+                  },
+                );
+              },
+            ),
+          ),
+        );
 
   /// Build feed tab using real Supabase data
   Widget _buildRealFeedTab(PostType? typeFilter) {

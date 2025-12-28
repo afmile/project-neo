@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:timeago/timeago.dart' as timeago;
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../domain/entities/wall_post.dart';
 import '../../domain/entities/wall_post_comment.dart';
@@ -255,10 +256,18 @@ class _WallPostCardState extends ConsumerState<WallPostCard> {
             ),
             child: comment.authorAvatar != null && comment.authorAvatar!.isNotEmpty
                 ? ClipOval(
-                    child: Image.network(
-                      comment.authorAvatar!,
+                    child: CachedNetworkImage(
+                      imageUrl: comment.authorAvatar!,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Icon(
+                      placeholder: (context, url) => Container(
+                        color: NeoColors.accent.withValues(alpha: 0.2),
+                        child: Icon(
+                          Icons.person,
+                          color: NeoColors.accent,
+                          size: 12,
+                        ),
+                      ),
+                      errorWidget: (context, url, error) => Icon(
                         Icons.person,
                         color: NeoColors.accent,
                         size: 12,
@@ -348,10 +357,18 @@ class _WallPostCardState extends ConsumerState<WallPostCard> {
       ),
       child: widget.post.authorAvatar != null && widget.post.authorAvatar!.isNotEmpty
           ? ClipOval(
-              child: Image.network(
-                widget.post.authorAvatar!,
+              child: CachedNetworkImage(
+                imageUrl: widget.post.authorAvatar!,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const Icon(
+                placeholder: (context, url) => Container(
+                  color: NeoColors.accent.withValues(alpha: 0.2),
+                  child: const Icon(
+                    Icons.person,
+                    color: NeoColors.accent,
+                    size: 20,
+                  ),
+                ),
+                errorWidget: (context, url, error) => const Icon(
                   Icons.person,
                   color: NeoColors.accent,
                   size: 20,

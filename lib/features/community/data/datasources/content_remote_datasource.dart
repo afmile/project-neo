@@ -12,12 +12,22 @@ import '../../domain/entities/comment_entity.dart';
 
 /// Abstract datasource for content operations
 abstract class ContentRemoteDataSource {
-  /// Get feed with type filter
+  /// Get feed with type filter (LEGACY OFFSET)
   Future<List<PostModel>> getFeed({
     required String communityId,
     PostType? typeFilter,
     int limit = 20,
     int offset = 0,
+  });
+  
+  /// Get feed with cursor-based pagination  
+  Future<List<PostModel>> getFeedPaginated({
+    required String communityId,
+    PostType? typeFilter,
+    required int limit,
+    bool? cursorIsPinned,     // NEW: 3-field cursor
+    String? cursorCreatedAt,
+    String? cursorId,
   });
   
   /// Get single post by ID
@@ -141,6 +151,108 @@ class ContentRemoteDataSourceImpl implements ContentRemoteDataSource {
         }
       }
       
+      return (response as List).map((json) {
+        final postId = json['id'] as String;
+        return PostModel.fromJson(
+          json as Map<String, dynamic>,
+          currentUserId: _currentUserId,
+          userReactions: userReactions,
+          pollVote: userPollVotes.containsKey(postId) 
+              ? {'option_id': userPollVotes[postId]} 
+              : null,
+        );
+      }).toList();
+    } on PostgrestException catch (e) {
+      throw ServerException(e.message);
+    } catch (e) {
+      throw ServerException(e.toString());
+    }
+  }
+  
+  @override
+  Future<List<PostModel>> getFeedPaginated({
+    required String communityId,
+    PostType? typeFilter,
+    required int limit,
+    bool? cursorIsPinned,
+    String? cursorCreatedAt,
+    String? cursorId,
+  }) async {
+    try {
+      // Build base query
+      var query = _client
+          .from('community_posts')
+          .select('''
+            *,
+            author:author_id (username, avatar_global_url),
+            poll_options (id, text, position, votes_count)
+          ''')
+          .eq('community_id', communityId);
+      
+      // Apply type filter
+      if (typeFilter != null) {
+        query = query.eq('post_type', typeFilter.dbValue);
+      }
+      
+      // Apply 3-field cursor for pagination (is_pinned + created_at + id)
+      // Respects ORDER BY is_pinned DESC, created_at DESC, id DESC
+      if (cursorIsPinned != null && cursorCreatedAt != null && cursorId != null) {
+        query = query.or(
+          // Next group: pinned -> normal (true -> false)
+          'is_pinned.lt.$cursorIsPinned,'
+          // Same pinned status, older post
+          'and(is_pinned.eq.$cursorIsPinned,created_at.lt.$cursorCreatedAt),'
+          // Same pinned + same timestamp, smaller id
+          'and(is_pinned.eq.$cursorIsPinned,created_at.eq.$cursorCreatedAt,id.lt.$cursorId)'
+        );
+      }
+      
+      // Ordering: MUST match cursor fields exactly
+      final response = await query
+          .order('is_pinned', ascending: false)
+          .order('created_at', ascending: false)
+          .order('id', ascending: false)
+          .limit(limit + 1); // +1 to detect hasMore
+      
+      // Get user reactions for these posts
+      final postIds = (response as List)
+          .take(limit) // Only process up to limit posts
+          .map((p) => p['id'] as String)
+          .toList();
+      List<Map<String, dynamic>> userReactions = [];
+      
+      if (_currentUserId != null && postIds.isNotEmpty) {
+        final reactionsResponse = await _client
+            .from('post_reactions')
+            .select('post_id, user_id')
+            .eq('user_id', _currentUserId!)
+            .inFilter('post_id', postIds);
+        userReactions = List<Map<String, dynamic>>.from(reactionsResponse);
+      }
+      
+      // Get user poll votes
+      Map<String, String> userPollVotes = {};
+      if (_currentUserId != null && postIds.isNotEmpty) {
+        final pollPostIds = (response as List)
+            .take(limit)
+            .where((p) => p['post_type'] == 'poll')
+            .map((p) => p['id'] as String)
+            .toList();
+        
+        if (pollPostIds.isNotEmpty) {
+          final votesResponse = await _client
+              .from('poll_votes')
+              .select('option_id, poll_options!inner(post_id)')
+              .eq('user_id', _currentUserId!);
+          
+          for (final vote in votesResponse) {
+            final postId = vote['poll_options']['post_id'] as String;
+            userPollVotes[postId] = vote['option_id'] as String;
+          }
+        }
+      }
+      
+      // Return up to 'limit' posts (the +1 is used by caller to detect hasMore)
       return (response as List).map((json) {
         final postId = json['id'] as String;
         return PostModel.fromJson(

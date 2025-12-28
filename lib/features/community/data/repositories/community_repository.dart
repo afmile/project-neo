@@ -89,6 +89,14 @@ abstract class CommunityRepository {
     required String userId,
     required Map<String, dynamic> settings,
   });
+
+  /// Fetch paginated wall posts for a community feed
+  Future<Either<Failure, List<Map<String, dynamic>>>> fetchWallPostsPaginated({
+    required String communityId,
+    required int limit,
+    String? cursorCreatedAt,
+    String? cursorId,
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -521,6 +529,118 @@ class CommunityRepositoryImpl implements CommunityRepository {
     } catch (e) {
       print('❌ Error en repository: $e');
       throw Exception("Failed to update notification settings: $e");
+    }
+  }
+
+  @override
+  Future<Either<Failure, List<Map<String, dynamic>>>> fetchWallPostsPaginated({
+    required String communityId,
+    required int limit,
+    String? cursorCreatedAt,
+    String? cursorId,
+  }) async {
+    try {
+      print('🔄 Fetching paginated wall posts for community: $communityId');
+      
+      // Build base query
+      var query = _supabase
+          .from('wall_posts')
+          .select('''
+            *,
+            author:users_global!wall_posts_author_id_fkey(username, avatar_global_url),
+            user_likes:wall_post_likes(user_id)
+          ''')
+          .eq('community_id', communityId);
+      
+      // Apply cursor if provided (compound cursor: created_at DESC, then id DESC)
+      if (cursorCreatedAt != null && cursorId != null) {
+        // Posts with created_at < cursor OR (created_at = cursor AND id < cursor_id)
+        query = query.or(
+            'created_at.lt.$cursorCreatedAt,'
+            'and(created_at.eq.$cursorCreatedAt,id.lt.$cursorId)'
+        );
+      }
+      
+      // Execute query with ordering
+      final response = await query
+          .order('created_at', ascending: false)
+          .order('id', ascending: false)
+          .limit(limit);
+      
+      final posts = response as List;
+      
+      if (posts.isEmpty) {
+        print('✅ No posts found');
+        return const Right([]);
+      }
+      
+      print('📦 Fetched ${posts.length} posts');
+      
+      // Extract IDs for batch fetching
+      final postIds = posts.map((p) => p['id'] as String).toList();
+      final authorIds = posts.map((p) => p['author_id'] as String).toSet().toList();
+      
+      final commentsCounts = <String, int>{};
+      final localProfiles = <String, Map<String, dynamic>>{};
+      
+      // Parallel fetch: Comments counts AND Local Profiles
+      await Future.wait([
+        // Fetch comments counts
+        Future(() async {
+          if (postIds.isNotEmpty) {
+            final commentsResponse = await _supabase
+                .from('wall_post_comments')
+                .select('post_id')
+                .inFilter('post_id', postIds);
+            
+            for (final comment in commentsResponse as List) {
+              final postId = comment['post_id'] as String;
+              commentsCounts[postId] = (commentsCounts[postId] ?? 0) + 1;
+            }
+          }
+        }),
+        // Fetch local profiles for authors in this community
+        Future(() async {
+          if (authorIds.isNotEmpty) {
+            final profilesResponse = await _supabase
+                .from('community_members')
+                .select('user_id, nickname, avatar_url')
+                .eq('community_id', communityId)
+                .inFilter('user_id', authorIds);
+                
+            for (final profile in profilesResponse as List) {
+              localProfiles[profile['user_id']] = profile;
+            }
+          }
+        }),
+      ]);
+      
+      // Inject local profile data and comments count into posts
+      for (final post in posts) {
+        post['comments_count'] = commentsCounts[post['id']] ?? 0;
+        
+        final authorId = post['author_id'];
+        final localProfile = localProfiles[authorId];
+        
+        if (localProfile != null) {
+          // Override global author data with local profile
+          if (post['author'] == null) post['author'] = <String, dynamic>{};
+          
+          if (localProfile['nickname'] != null) {
+            post['author']['username'] = localProfile['nickname'];
+          }
+          if (localProfile['avatar_url'] != null) {
+            post['author']['avatar_global_url'] = localProfile['avatar_url'];
+          }
+        }
+      }
+      
+      print('✅ Posts processed with local overrides');
+      return Right(posts);
+    } catch (e, stackTrace) {
+      print('❌ Error fetching paginated wall posts: $e');
+      print('📍 Stack trace: $stackTrace');
+      return Left(ServerFailure('Error cargando posts: $e'));
     }
   }
   

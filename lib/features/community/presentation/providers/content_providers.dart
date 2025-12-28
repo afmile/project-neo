@@ -43,31 +43,49 @@ final draftServiceProvider = Provider<DraftService>((ref) {
 // FEED PROVIDERS
 // ============================================================================
 
-/// Feed state
+/// Feed state with cursor-based pagination support
 class FeedState {
   final List<PostEntity> posts;
   final bool isLoading;
+  final bool isLoadingMore;
   final bool hasMore;
   final String? error;
+  
+  // 3-field cursor for robust pagination (matches ORDER BY)
+  final bool? lastIsPinned;
+  final String? lastCreatedAt;
+  final String? lastId;
 
   const FeedState({
     this.posts = const [],
     this.isLoading = true,
+    this.isLoadingMore = false,
     this.hasMore = true,
     this.error,
+    this.lastIsPinned,
+    this.lastCreatedAt,
+    this.lastId,
   });
 
   FeedState copyWith({
     List<PostEntity>? posts,
     bool? isLoading,
+    bool? isLoadingMore,
     bool? hasMore,
     String? error,
+    bool? lastIsPinned,
+    String? lastCreatedAt,
+    String? lastId,
   }) {
     return FeedState(
       posts: posts ?? this.posts,
       isLoading: isLoading ?? this.isLoading,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       hasMore: hasMore ?? this.hasMore,
       error: error,
+      lastIsPinned: lastIsPinned ?? this.lastIsPinned,
+      lastCreatedAt: lastCreatedAt ?? this.lastCreatedAt,
+      lastId: lastId ?? this.lastId,
     );
   }
 }
@@ -91,11 +109,13 @@ class FeedNotifier extends StateNotifier<FeedState> {
   Future<void> loadInitial() async {
     state = state.copyWith(isLoading: true, error: null);
     
-    final result = await repository.getFeed(
+    final result = await repository.getFeedPaginated(
       communityId: communityId,
       typeFilter: typeFilter,
-      limit: _pageSize,
-      offset: 0,
+      limit: _pageSize + 1,
+      cursorIsPinned: null,  // No cursor for first page
+      cursorCreatedAt: null,
+      cursorId: null,
     );
     
     result.fold(
@@ -103,36 +123,83 @@ class FeedNotifier extends StateNotifier<FeedState> {
         isLoading: false,
         error: failure.message,
       ),
-      (posts) => state = state.copyWith(
-        posts: posts,
-        isLoading: false,
-        hasMore: posts.length >= _pageSize,
-      ),
+      (posts) {
+        final hasMore = posts.length > _pageSize;
+        final displayPosts = hasMore ? posts.sublist(0, _pageSize) : posts;
+        
+        // Extract 3-field cursor from last post
+        bool? lastIsPinned;
+        String? lastCreatedAt;
+        String? lastId;
+        if (displayPosts.isNotEmpty) {
+          final lastPost = displayPosts.last;
+          lastIsPinned = lastPost.isPinned;  // NEW
+          lastCreatedAt = lastPost.createdAt.toIso8601String();
+          lastId = lastPost.id;
+        }
+        
+        state = state.copyWith(
+          posts: displayPosts,
+          isLoading: false,
+          isLoadingMore: false,
+          hasMore: hasMore,
+          lastIsPinned: lastIsPinned,  // NEW
+          lastCreatedAt: lastCreatedAt,
+          lastId: lastId,
+        );
+      },
     );
   }
   
   Future<void> loadMore() async {
-    if (state.isLoading || !state.hasMore) return;
+    if (state.isLoadingMore || !state.hasMore || state.isLoading) return;
     
-    state = state.copyWith(isLoading: true);
+    state = state.copyWith(isLoadingMore: true);
     
-    final result = await repository.getFeed(
+    final result = await repository.getFeedPaginated(
       communityId: communityId,
       typeFilter: typeFilter,
-      limit: _pageSize,
-      offset: state.posts.length,
+      limit: _pageSize + 1,
+      cursorIsPinned: state.lastIsPinned,  // NEW: 3-field cursor
+      cursorCreatedAt: state.lastCreatedAt,
+      cursorId: state.lastId,
     );
     
     result.fold(
       (failure) => state = state.copyWith(
-        isLoading: false,
+        isLoadingMore: false,
         error: failure.message,
       ),
-      (posts) => state = state.copyWith(
-        posts: [...state.posts, ...posts],
-        isLoading: false,
-        hasMore: posts.length >= _pageSize,
-      ),
+      (newPosts) {
+        final hasMore = newPosts.length > _pageSize;
+        final displayPosts = hasMore ? newPosts.sublist(0, _pageSize) : newPosts;
+        
+        // Deduplication by id
+        final existingIds = state.posts.map((p) => p.id).toSet();
+        final uniqueNewPosts = displayPosts
+            .where((p) => !existingIds.contains(p.id))
+            .toList();
+        
+        // Extract 3-field cursor from last new post
+        bool? lastIsPinned = state.lastIsPinned;
+        String? lastCreatedAt = state.lastCreatedAt;
+        String? lastId = state.lastId;
+        if (uniqueNewPosts.isNotEmpty) {
+          final lastPost = uniqueNewPosts.last;
+          lastIsPinned = lastPost.isPinned;  // NEW
+          lastCreatedAt = lastPost.createdAt.toIso8601String();
+          lastId = lastPost.id;
+        }
+        
+        state = state.copyWith(
+          posts: [...state.posts, ...uniqueNewPosts],
+          isLoadingMore: false,
+          hasMore: hasMore,
+          lastIsPinned: lastIsPinned,  // NEW
+          lastCreatedAt: lastCreatedAt,
+          lastId: lastId,
+        );
+      },
     );
   }
   

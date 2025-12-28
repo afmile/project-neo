@@ -10,12 +10,28 @@ import '../entities/comment_entity.dart';
 
 /// Content repository interface for polymorphic content management
 abstract class ContentRepository {
-  /// Get feed posts with optional type filter and pagination
+  /// Get feed posts with optional type filter and pagination (LEGACY - uses OFFSET)
+  /// DEPRECATED: Use getFeedPaginated instead for better performance
+  @Deprecated('Use getFeedPaginated for cursor-based pagination')
   Future<Either<Failure, List<PostEntity>>> getFeed({
     required String communityId,
     PostType? typeFilter,
     int limit = 20,
     int offset = 0,
+  });
+  
+  /// Get feed posts with cursor-based pagination
+  /// 
+  /// Uses compound cursor (is_pinned + created_at + id) for consistent pagination.
+  /// This prevents mixing pinned/normal posts across pages when >20 pinned exist.
+  /// Pass null cursors for first page.
+  Future<Either<Failure, List<PostEntity>>> getFeedPaginated({
+    required String communityId,
+    PostType? typeFilter,
+    required int limit,
+    bool? cursorIsPinned,     // NEW: Respects ORDER BY is_pinned DESC
+    String? cursorCreatedAt,
+    String? cursorId,
   });
   
   /// Get single post by ID with full details
