@@ -18,6 +18,7 @@ import '../widgets/wall_post_card.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../core/widgets/telegram_input_bar.dart';
 import '../../../../core/widgets/report_modal.dart';
+import '../providers/community_providers.dart';
 import 'public_user_profile_screen.dart';
 
 class WallPostThreadScreen extends ConsumerStatefulWidget {
@@ -43,10 +44,16 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
   bool _isLoading = true;
   bool _isSending = false;
   File? _selectedImage;
+  
+  // Local state for like (since widget.post is immutable)
+  late bool _isLiked;
+  late int _likesCount;
 
   @override
   void initState() {
     super.initState();
+    _isLiked = widget.post.isLikedByCurrentUser;
+    _likesCount = widget.post.likes;
     _fetchComments();
     
     if (widget.autoFocusInput) {
@@ -54,6 +61,39 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
         _commentFocusNode.requestFocus();
       });
     }
+  }
+  
+  /// Toggle like on the parent post
+  Future<void> _toggleLike() async {
+    // Optimistic update
+    setState(() {
+      _isLiked = !_isLiked;
+      _likesCount += _isLiked ? 1 : -1;
+    });
+    
+    // Persist via repository
+    final repository = ref.read(communityRepositoryProvider);
+    final result = await repository.toggleWallPostLike(widget.post.id);
+    
+    result.fold(
+      (failure) {
+        // Rollback on error
+        setState(() {
+          _isLiked = !_isLiked;
+          _likesCount += _isLiked ? 1 : -1;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${failure.message}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      },
+      (isLiked) {
+        // Server confirmed, already updated optimistically
+        debugPrint('Like toggled: $isLiked');
+      },
+    );
   }
 
   @override
@@ -209,8 +249,12 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
                         // No vertical line - using indentation only for cleaner look
                           
                         WallPostCard(
-                          post: widget.post,
+                          post: widget.post.copyWith(
+                            isLikedByCurrentUser: _isLiked,
+                            likes: _likesCount,
+                          ),
                           isThreadView: true,
+                          onLike: _toggleLike,
                           // Focus input when comment button is tapped in thread view
                           onComment: () => _commentFocusNode.requestFocus(),
                           onDelete: () {}, 

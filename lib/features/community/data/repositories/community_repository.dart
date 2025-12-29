@@ -561,7 +561,7 @@ class CommunityRepositoryImpl implements CommunityRepository {
           .from('wall_posts')
           .select('''
             *,
-            author:users_global!wall_posts_author_id_fkey(username, avatar_global_url),
+            author:users_global!wall_posts_profile_user_id_fkey(username, avatar_global_url),
             user_likes:wall_post_likes(user_id)
           ''')
           .eq('community_id', communityId);
@@ -676,16 +676,22 @@ class CommunityRepositoryImpl implements CommunityRepository {
         return const Left(ValidationFailure('El contenido no puede estar vacío'));
       }
       
+      // Build insert payload (table has both profile_user_id and author_id)
+      final payload = {
+        'community_id': communityId,
+        'profile_user_id': userId, // FK to users_global.id
+        'author_id': userId, // Legacy column, also NOT NULL
+        'content': content.trim(),
+      };
+      
+      print('📝 Insert wall_posts payload: $payload');
+      
       final response = await _supabase
           .from('wall_posts')
-          .insert({
-            'community_id': communityId,
-            'author_id': userId,
-            'content': content.trim(),
-          })
+          .insert(payload)
           .select('''
             *,
-            author:users_global!wall_posts_author_id_fkey(username, avatar_global_url)
+            author:users_global!wall_posts_profile_user_id_fkey(username, avatar_global_url)
           ''')
           .single();
       
@@ -712,23 +718,21 @@ class CommunityRepositoryImpl implements CommunityRepository {
         return const Left(AuthFailure('Usuario no autenticado'));
       }
       
-      // Check if like exists
+      // Check if like exists (table has composite PK: post_id + user_id, no 'id' column)
       final existing = await _supabase
           .from('wall_post_likes')
-          .select('id')
+          .select('post_id')
           .eq('post_id', postId)
           .eq('user_id', userId)
           .maybeSingle();
       
       if (existing != null) {
-        // Unlike: remove the like
+        // Unlike: remove the like using composite key
         await _supabase
             .from('wall_post_likes')
             .delete()
-            .eq('id', existing['id']);
-        
-        // Decrement likes_count on wall_posts
-        await _supabase.rpc('decrement_wall_post_likes', params: {'post_id': postId});
+            .eq('post_id', postId)
+            .eq('user_id', userId);
         
         print('👎 Unliked wall post: $postId');
         return const Right(false);
@@ -739,36 +743,10 @@ class CommunityRepositoryImpl implements CommunityRepository {
           'user_id': userId,
         });
         
-        // Increment likes_count on wall_posts
-        await _supabase.rpc('increment_wall_post_likes', params: {'post_id': postId});
-        
         print('👍 Liked wall post: $postId');
         return const Right(true);
       }
     } on PostgrestException catch (e) {
-      // If RPC doesn't exist, just toggle without count update
-      if (e.message.contains('function') && e.message.contains('does not exist')) {
-        print('⚠️ RPC functions not found, toggling without count update');
-        // Fallback: just toggle the like without count update
-        final userId = _currentUserId!;
-        final existing = await _supabase
-            .from('wall_post_likes')
-            .select('id')
-            .eq('post_id', postId)
-            .eq('user_id', userId)
-            .maybeSingle();
-        
-        if (existing != null) {
-          await _supabase.from('wall_post_likes').delete().eq('id', existing['id']);
-          return const Right(false);
-        } else {
-          await _supabase.from('wall_post_likes').insert({
-            'post_id': postId,
-            'user_id': userId,
-          });
-          return const Right(true);
-        }
-      }
       print('❌ Postgres error toggling like: ${e.message}');
       return Left(ServerFailure('Error al dar like: ${e.message}'));
     } catch (e) {

@@ -20,7 +20,7 @@ class WallPostModel {
     return WallPost(
       id: json['id'] as String,
       communityId: json['community_id'] as String,
-      authorId: json['author_id'] as String,
+      authorId: json['profile_user_id'] as String,
       authorName: author?['username'] as String? ?? 'Usuario',
       authorAvatar: author?['avatar_global_url'] as String?,
       content: json['content'] as String,
