@@ -9,7 +9,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../../../core/theme/neo_widgets.dart';
+import '../../../../core/config/env_config.dart';
 import '../providers/auth_provider.dart';
+// import 'package:hcaptcha_flutter/hcaptcha_flutter.dart'; // Commented out - see CAPTCHA_SETUP.md
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -27,6 +29,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
   bool _acceptedTerms = false;
+  String? _captchaToken; // Store CAPTCHA token
   
   @override
   void dispose() {
@@ -49,10 +52,22 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         return;
       }
       
+      // Check CAPTCHA if enabled
+      if (EnvConfig.isCaptchaEnabled && _captchaToken == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Completa el CAPTCHA para continuar'),
+            backgroundColor: NeoColors.warning,
+          ),
+        );
+        return;
+      }
+      
       ref.read(authProvider.notifier).signUpWithEmail(
         _emailController.text.trim(),
         _passwordController.text,
         _usernameController.text.trim(),
+        captchaToken: _captchaToken,
       );
     }
   }
@@ -113,6 +128,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 _buildTermsRow()
                     .animate()
                     .fadeIn(duration: 500.ms, delay: 250.ms),
+                    
+                SizedBox(height: EnvConfig.isCaptchaEnabled ? NeoSpacing.md : NeoSpacing.lg),
+                
+                // CAPTCHA widget (only if enabled)
+                if (EnvConfig.isCaptchaEnabled)
+                  _buildCaptchaWidget()
+                      .animate()
+                      .fadeIn(duration: 500.ms, delay: 300.ms),
                     
                 const SizedBox(height: NeoSpacing.lg),
                 
@@ -359,6 +382,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     );
   }
   
+  
   Widget _buildLoginLink() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -374,6 +398,49 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           ),
         ),
       ],
+    );
+  }
+  
+  Widget _buildCaptchaWidget() {
+    return NeoCard(
+      padding: const EdgeInsets.all(NeoSpacing.md),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.verified_user_outlined,
+                size: 18,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(width: NeoSpacing.sm),
+              Text(
+                'Verificación de seguridad',
+                style: NeoTextStyles.labelMedium,
+              ),
+            ],
+          ),
+          const SizedBox(height: NeoSpacing.sm),
+          Container(
+            padding: const EdgeInsets.all(NeoSpacing.sm),
+            decoration: BoxDecoration(
+              color: NeoColors.card,
+              borderRadius: BorderRadius.circular(NeoSpacing.smallRadius),
+              border: Border.all(
+                color: NeoColors.border,
+                width: NeoSpacing.borderWidth,
+              ),
+            ),
+            child: Text(
+              'CAPTCHA configurado pero widget no disponible.\nVer CAPTCHA_SETUP.md para configuración.',
+              style: NeoTextStyles.bodySmall,
+              textAlign: TextAlign.center,
+            ),
+          ),
+          // HCaptcha widget will be added here once dependency is configured
+          // See CAPTCHA_SETUP.md for integration instructions
+        ],
+      ),
     );
   }
 }

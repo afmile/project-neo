@@ -21,6 +21,9 @@ class NeoColors {
   /// Slightly lifted surface
   static const Color surface = Color(0xFF0D0D0D);
   
+  /// Lighter surface for elevated elements
+  static const Color surfaceLight = Color(0xFF1A1A1A);
+  
   /// Card/Bento cell background
   static const Color card = Color(0xFF141414);
   

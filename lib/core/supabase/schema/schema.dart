@@ -8,3 +8,4 @@ library;
 
 export 'chat_channels_schema.dart';
 export 'users_global_schema.dart';
+export 'bug_reports_schema.dart';

@@ -15,14 +15,17 @@ abstract class AuthRemoteDataSource {
   /// Stream of auth state changes
   Stream<UserModel?> get authStateChanges;
   
-  /// Get current user
+  /// Get current user synchronously (from Supabase session cache)
+  UserModel? get currentUser;
+  
+  /// Get current user async (with profile fetch)
   Future<UserModel?> getCurrentUser();
   
   /// Sign in with email/password
   Future<UserModel> signInWithEmail(String email, String password);
   
   /// Sign up with email/password
-  Future<UserModel> signUpWithEmail(String email, String password, String username);
+  Future<UserModel> signUpWithEmail(String email, String password, String username, {String? captchaToken});
   
   /// Verify email OTP
   Future<UserModel> verifyEmailOtp(String email, String token);
@@ -93,6 +96,23 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   }
   
   @override
+  UserModel? get currentUser {
+    // Synchronous access to cached session
+    final user = _client.auth.currentUser;
+    if (user == null) return null;
+    
+    // Create minimal UserModel from cached user data
+    return UserModel(
+      id: user.id,
+      email: user.email ?? '',
+      username: user.userMetadata?['username'] as String? ?? 'user_${user.id.substring(0, 8)}',
+      displayName: user.userMetadata?['display_name'] as String?,
+      avatarUrl: user.userMetadata?['avatar_url'] as String?,
+      createdAt: DateTime.now(), // Placeholder - will be updated by stream
+    );
+  }
+  
+  @override
   Future<UserModel?> getCurrentUser() async {
     try {
       final user = _client.auth.currentUser;
@@ -130,6 +150,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     String email, 
     String password, 
     String username,
+    {String? captchaToken}
   ) async {
     try {
       // Check if username is already taken
@@ -151,6 +172,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         email: email,
         password: password,
         data: {'username': username},
+        captchaToken: captchaToken, // Pass CAPTCHA token if provided
       );
       
       if (response.user == null) {

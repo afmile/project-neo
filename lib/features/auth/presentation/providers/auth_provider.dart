@@ -86,9 +86,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
   
   void _init() {
-    state = state.copyWith(status: AuthStatus.loading);
+    // STEP 1: Check current session SYNCHRONOUSLY first
+    final currentUser = _repository.currentUser;
     
-    // Listen to auth state changes
+    if (currentUser != null) {
+      state = AuthState(
+        status: AuthStatus.authenticated,
+        user: currentUser,
+      );
+    } else {
+      state = const AuthState(status: AuthStatus.unauthenticated);
+    }
+    
+    // STEP 2: Subscribe to stream for FUTURE auth changes only
+    // This will update state when user logs in/out
     _authSubscription = _repository.authStateChanges.listen(
       (user) {
         if (user != null) {
@@ -105,28 +116,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
           status: AuthStatus.error,
           error: error.toString(),
         );
-      },
-    );
-    
-    // Also check current user
-    _checkCurrentUser();
-  }
-  
-  Future<void> _checkCurrentUser() async {
-    final result = await _repository.getCurrentUser();
-    result.fold(
-      (failure) {
-        state = const AuthState(status: AuthStatus.unauthenticated);
-      },
-      (user) {
-        if (user != null) {
-          state = AuthState(
-            status: AuthStatus.authenticated,
-            user: user,
-          );
-        } else {
-          state = const AuthState(status: AuthStatus.unauthenticated);
-        }
       },
     );
   }
@@ -165,13 +154,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
   
   /// Sign up with email and password
-  Future<void> signUpWithEmail(String email, String password, String username) async {
+  Future<void> signUpWithEmail(
+    String email, 
+    String password, 
+    String username,
+    {String? captchaToken}
+  ) async {
     state = state.copyWith(status: AuthStatus.loading);
     
     final result = await _repository.signUpWithEmail(
       email: email,
       password: password,
       username: username,
+      captchaToken: captchaToken,
     );
     
     result.fold(

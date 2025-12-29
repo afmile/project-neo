@@ -20,6 +20,9 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
+import '../config/env_config.dart';
+import '../error/presentation/screens/report_issue_screen.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
@@ -40,64 +43,103 @@ import '../../features/chat/presentation/screens/chat_conversation_screen.dart';
 import '../../features/chat/presentation/screens/create_private_room_screen.dart';
 import '../../features/community/presentation/screens/community_settings_screen.dart';
 import '../../features/community/presentation/screens/local_edit_profile_screen.dart';
+import '../beta/beta.dart';
 
 /// Global navigator key
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
+/// Auth state change notifier for router refresh
+final _authChangeNotifierProvider = Provider<ValueNotifier<int>>((ref) {
+  final notifier = ValueNotifier<int>(0);
+  ref.listen<AuthState>(authProvider, (previous, next) {
+    if (previous?.status != next.status) {
+      notifier.value++;
+    }
+  });
+  ref.onDispose(() => notifier.dispose());
+  return notifier;
+});
+
 /// Router provider
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authProvider);
+  final authChangeNotifier = ref.watch(_authChangeNotifierProvider);
   
   return GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: '/',
-    debugLogDiagnostics: true,
+    debugLogDiagnostics: false,
+    refreshListenable: authChangeNotifier,
     
-    // Redirect based on auth state
+    // Sentry navigation tracking (if enabled)
+    observers: EnvConfig.isSentryEnabled
+        ? [SentryNavigatorObserver()]
+        : [],
+    
+    // Redirect based on auth state - HARDENED
     redirect: (context, state) {
-      final isLoading = authState.status == AuthStatus.initial || 
-                        authState.status == AuthStatus.loading;
+      final authState = ref.read(authProvider);
+      final currentLocation = state.matchedLocation;
       final isAuthenticated = authState.status == AuthStatus.authenticated;
       final needsVerification = authState.status == AuthStatus.needsVerification;
-      final hasError = authState.status == AuthStatus.error;
       
-      final isOnSplash = state.matchedLocation == '/';
-      final isOnAuth = state.matchedLocation == '/login' || 
-                       state.matchedLocation == '/register' ||
-                       state.matchedLocation == '/forgot-password';
-      final isOnVerify = state.matchedLocation == '/verify-email';
+      final isOnSplash = currentLocation == '/';
+      final isOnVerify = currentLocation == '/verify-email';
+      const publicAuthRoutes = ['/login', '/register', '/forgot-password', '/verify-email'];
+      final isOnPublicAuth = publicAuthRoutes.contains(currentLocation);
       
-      // Still loading - show splash
-      if (isLoading && !isOnSplash) {
-        return '/';
+      String? redirectTo;
+      
+      // RULE 1: Splash is NEVER a final destination
+      if (isOnSplash) {
+        if (isAuthenticated) {
+          redirectTo = '/home';
+        } else if (needsVerification) {
+          redirectTo = '/verify-email';
+        } else {
+          redirectTo = '/login';
+        }
+      }
+      // RULE 2: Needs email verification
+      else if (needsVerification && !isOnVerify) {
+        redirectTo = '/verify-email';
+      }
+      // RULE 3: Authenticated on auth screens -> home
+      else if (isAuthenticated && isOnPublicAuth) {
+        redirectTo = '/home';
+      }
+      // RULE 4: Not authenticated on private routes -> login
+      else if (!isAuthenticated && !needsVerification && !isOnPublicAuth) {
+        redirectTo = '/login';
       }
       
-      // Needs verification - go to verify screen
-      if (needsVerification && !isOnVerify) {
-        return '/verify-email';
+      // IDEMPOTENCY: Never redirect to current location
+      if (redirectTo == currentLocation) {
+        redirectTo = null;
       }
       
-      // If on verify screen and has pending email, stay there
-      if (isOnVerify && authState.pendingEmail != null) {
-        return null; // Stay on verify
+      // ═══════════════════════════════════════════════════════════════════════
+      // BETA GUARDS (after auth is resolved)
+      // ═══════════════════════════════════════════════════════════════════════
+      
+      // Only check beta guards for authenticated users going to private routes
+      if (redirectTo == null && isAuthenticated && !isOnPublicAuth && !isOnSplash) {
+        final isOnBetaScreen = currentLocation == '/beta-locked';
+        final isOnUpdateScreen = currentLocation == '/force-update';
+        
+        // Check version first (higher priority)
+        final isVersionBlocked = ref.read(isVersionBlockedProvider);
+        if (isVersionBlocked && !isOnUpdateScreen) {
+          return '/force-update';
+        }
+        
+        // Check beta access
+        final betaAccess = ref.read(betaAccessStateProvider);
+        if (betaAccess == BetaAccessState.denied && !isOnBetaScreen && !isOnUpdateScreen) {
+          return '/beta-locked';
+        }
       }
       
-      // Authenticated - redirect away from auth screens
-      if (isAuthenticated && (isOnAuth || isOnSplash || isOnVerify)) {
-        return '/home';
-      }
-      
-      // If there's an error on auth screens, stay there
-      if (hasError && isOnAuth) {
-        return null; // Stay to show error
-      }
-      
-      // Not authenticated - redirect to login (but not if on auth screens already)
-      if (!isAuthenticated && !isOnAuth && !isOnSplash && !needsVerification && !isOnVerify) {
-        return '/login';
-      }
-      
-      return null; // No redirect
+      return redirectTo;
     },
     
     routes: [
@@ -130,6 +172,18 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const Scaffold(
           body: Center(child: Text('Forgot Password - TODO')),
         ),
+      ),
+      
+      // Beta routes
+      GoRoute(
+        path: '/beta-locked',
+        name: 'beta-locked',
+        builder: (context, state) => const BetaLockedScreen(),
+      ),
+      GoRoute(
+        path: '/force-update',
+        name: 'force-update',
+        builder: (context, state) => const ForceUpdateScreen(),
       ),
       
       // Main app routes
@@ -271,6 +325,24 @@ final routerProvider = Provider<GoRouter>((ref) {
             communityId: state.pathParameters['id']!,
             communityName: extras['name'] as String,
             themeColor: extras['color'] as Color,
+          );
+        },
+      ),
+      
+      // Report Issue
+      GoRoute(
+        path: '/report-issue',
+        name: 'report-issue',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          return ReportIssueScreen(
+            route: extra?['route'] as String?,
+            communityId: extra?['community_id'] as String?,
+            feature: extra?['feature'] as String?,
+            errorMessage: extra?['error_message'] as String?,
+            error: extra?['error'] as String?,
+            stackTrace: extra?['stack_trace'] as String?,
           );
         },
       ),

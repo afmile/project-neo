@@ -19,36 +19,9 @@ class SplashScreen extends ConsumerStatefulWidget {
 
 class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
-  void initState() {
-    super.initState();
-    _checkAuth();
-  }
-  
-  Future<void> _checkAuth() async {
-    await Future.delayed(const Duration(milliseconds: 1200));
-    
-    if (!mounted) return;
-    
-    final authState = ref.read(authProvider);
-    
-    if (authState.status == AuthStatus.authenticated) {
-      context.go('/home');
-    } else if (authState.status == AuthStatus.needsVerification) {
-      context.go('/verify-email');
-    } else {
-      context.go('/login');
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    ref.listen<AuthState>(authProvider, (previous, next) {
-      if (next.status == AuthStatus.authenticated) {
-        context.go('/home');
-      } else if (next.status == AuthStatus.unauthenticated) {
-        context.go('/login');
-      }
-    });
+    // No manual navigation - router redirect handles everything automatically
+    // based on auth state via refreshListenable
     
     return Scaffold(
       backgroundColor: NeoColors.background,

@@ -12,6 +12,9 @@ abstract class AuthRepository {
   /// Stream of authentication state changes
   Stream<UserEntity?> get authStateChanges;
   
+  /// Get current user synchronously (from cache/memory)
+  UserEntity? get currentUser;
+  
   /// Get the currently authenticated user
   Future<Either<Failure, UserEntity?>> getCurrentUser();
   
@@ -27,6 +30,7 @@ abstract class AuthRepository {
     required String email,
     required String password,
     required String username,
+    String? captchaToken,
   });
   
   /// Verify email with OTP code

@@ -35,6 +35,7 @@ import '../widgets/identity_card.dart'; // NEW
 import 'community_studio_screen.dart';
 import '../../../chat/presentation/screens/chat_room_screen.dart'; // NEW
 import '../../../chat/domain/entities/community_chat_room_entity.dart'; // NEW
+import '../../../../core/beta/beta.dart'; // Beta feedback button
 
 class CommunityHomeScreen extends ConsumerStatefulWidget {
   final CommunityEntity community;
@@ -87,7 +88,23 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: _buildBody(),
+      body: Stack(
+        children: [
+          _buildBody(),
+          // Beta Feedback FAB - positioned at bottom-right
+          if (isMember && !keyboardVisible)
+            Positioned(
+              right: 16,
+              bottom: 90, // Above bottom nav
+              child: FloatingActionButton.small(
+                heroTag: 'feedback_fab',
+                backgroundColor: NeoColors.accent,
+                onPressed: () => _showFeedbackModal(context),
+                child: const Icon(Icons.feedback_outlined, color: Colors.white, size: 20),
+              ),
+            ),
+        ],
+      ),
       floatingActionButton: isMember && !keyboardVisible
           ? _buildCentralFAB()
           : null,
@@ -95,6 +112,17 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
       bottomNavigationBar: isMember
           ? _buildInternalBottomNav()
           : _buildJoinBar(),
+    );
+  }
+  
+  void _showFeedbackModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _FeedbackModalWrapper(
+        currentRoute: GoRouter.of(context).routerDelegate.currentConfiguration.fullPath,
+      ),
     );
   }
 
@@ -2362,4 +2390,197 @@ class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(_SliverTabBarDelegate oldDelegate) => false;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FEEDBACK MODAL WRAPPER (for Beta feedback)
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _FeedbackModalWrapper extends ConsumerStatefulWidget {
+  final String currentRoute;
+  
+  const _FeedbackModalWrapper({required this.currentRoute});
+
+  @override
+  ConsumerState<_FeedbackModalWrapper> createState() => _FeedbackModalWrapperState();
+}
+
+class _FeedbackModalWrapperState extends ConsumerState<_FeedbackModalWrapper> {
+  FeedbackType _selectedType = FeedbackType.suggestion;
+  final _messageController = TextEditingController();
+  
+  @override
+  void dispose() {
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final submitState = ref.watch(feedbackNotifierProvider);
+    
+    // Listen for success
+    ref.listen<FeedbackSubmitState>(feedbackNotifierProvider, (prev, next) {
+      if (next == FeedbackSubmitState.success) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('¡Gracias por tu feedback!'),
+            backgroundColor: NeoColors.success,
+          ),
+        );
+        ref.read(feedbackNotifierProvider.notifier).reset();
+      }
+    });
+    
+    return Container(
+      margin: EdgeInsets.only(
+        top: MediaQuery.of(context).size.height * 0.15,
+      ),
+      decoration: const BoxDecoration(
+        color: NeoColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 24,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle bar
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: NeoColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Enviar Feedback',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: NeoColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Tu opinión nos ayuda a mejorar',
+                style: TextStyle(color: NeoColors.textSecondary),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Tipo de feedback',
+                style: TextStyle(
+                  color: NeoColors.textPrimary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  _buildTypeChip('🐛 Bug', FeedbackType.bug),
+                  const SizedBox(width: 8),
+                  _buildTypeChip('💡 Sugerencia', FeedbackType.suggestion),
+                  const SizedBox(width: 8),
+                  _buildTypeChip('💬 Otro', FeedbackType.other),
+                ],
+              ),
+              const SizedBox(height: 24),
+              TextField(
+                controller: _messageController,
+                maxLines: 5,
+                maxLength: 2000,
+                decoration: InputDecoration(
+                  hintText: 'Describe tu feedback aquí...',
+                  filled: true,
+                  fillColor: NeoColors.background,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: NeoColors.border),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: NeoColors.border),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: NeoColors.accent),
+                  ),
+                ),
+              ),
+              if (submitState == FeedbackSubmitState.error)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    ref.read(feedbackNotifierProvider.notifier).lastError ?? 'Error',
+                    style: const TextStyle(color: NeoColors.error),
+                  ),
+                ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: submitState == FeedbackSubmitState.submitting ? null : _submit,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: NeoColors.accent,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: submitState == FeedbackSubmitState.submitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Enviar Feedback'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildTypeChip(String label, FeedbackType type) {
+    final selected = _selectedType == type;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedType = type),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? NeoColors.accent : NeoColors.background,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? NeoColors.accent : NeoColors.border,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? Colors.white : NeoColors.textSecondary,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+  
+  void _submit() {
+    ref.read(feedbackNotifierProvider.notifier).submit(
+      type: _selectedType,
+      message: _messageController.text,
+      currentRoute: widget.currentRoute,
+    );
+  }
 }

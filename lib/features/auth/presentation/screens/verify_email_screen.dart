@@ -22,10 +22,10 @@ class VerifyEmailScreen extends ConsumerStatefulWidget {
 
 class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
   final List<TextEditingController> _controllers = List.generate(
-    8,
+    6,
     (_) => TextEditingController(),
   );
-  final List<FocusNode> _focusNodes = List.generate(8, (_) => FocusNode());
+  final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
   
   Timer? _resendTimer;
   int _resendCountdown = 0;
@@ -63,7 +63,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
   String get _otpCode => _controllers.map((c) => c.text).join();
   
   void _handleVerify() {
-    if (_otpCode.length == 8) {
+    if (_otpCode.length == 6) {
       ref.read(authProvider.notifier).verifyEmailOtp(_otpCode);
     }
   }
@@ -85,20 +85,20 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     // Handle paste - if pasted more than 1 char, distribute across fields
     if (value.length > 1) {
       final chars = value.split('');
-      for (var i = 0; i < chars.length && (index + i) < 8; i++) {
+      for (var i = 0; i < chars.length && (index + i) < 6; i++) {
         _controllers[index + i].text = chars[i];
       }
-      final nextIndex = (index + chars.length).clamp(0, 7);
+      final nextIndex = (index + chars.length).clamp(0, 5);
       _focusNodes[nextIndex].requestFocus();
       setState(() {});
     } 
     // Handle single char - move to next field
-    else if (value.isNotEmpty && index < 7) {
+    else if (value.isNotEmpty && index < 5) {
       _focusNodes[index + 1].requestFocus();
     }
     
     // Auto-verify when complete
-    if (_otpCode.length == 8) {
+    if (_otpCode.length == 6) {
       FocusScope.of(context).unfocus();
       _handleVerify();
     }
@@ -206,7 +206,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
               const SizedBox(height: NeoSpacing.sm),
               
               Text(
-                'Ingresa el código de 8 dígitos\nenviado a ${authState.pendingEmail ?? "tu correo"}',
+                'Ingresa el código de 6 dígitos\nenviado a ${authState.pendingEmail ?? "tu correo"}',
                 style: NeoTextStyles.bodyMedium,
                 textAlign: TextAlign.center,
               ).animate().fadeIn(duration: 500.ms, delay: 150.ms),
@@ -223,7 +223,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
               // Verify button
               NeoButton(
                 text: 'Verificar',
-                onPressed: authState.isLoading || _otpCode.length < 8
+                onPressed: authState.isLoading || _otpCode.length < 6
                     ? null
                     : _handleVerify,
                 isLoading: authState.isLoading,
@@ -258,7 +258,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
   Widget _buildOtpInput(AuthState authState) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(8, (index) {
+      children: List.generate(6, (index) {
         return Container(
           width: 38,
           height: 48,

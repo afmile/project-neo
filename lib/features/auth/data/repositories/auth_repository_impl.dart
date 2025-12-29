@@ -21,6 +21,9 @@ class AuthRepositoryImpl implements AuthRepository {
   Stream<UserEntity?> get authStateChanges => _remoteDataSource.authStateChanges;
   
   @override
+  UserEntity? get currentUser => _remoteDataSource.currentUser;
+  
+  @override
   Future<Either<Failure, UserEntity?>> getCurrentUser() async {
     try {
       final user = await _remoteDataSource.getCurrentUser();
@@ -56,9 +59,15 @@ class AuthRepositoryImpl implements AuthRepository {
     required String email,
     required String password,
     required String username,
+    String? captchaToken,
   }) async {
     try {
-      final user = await _remoteDataSource.signUpWithEmail(email, password, username);
+      final user = await _remoteDataSource.signUpWithEmail(
+        email, 
+        password, 
+        username,
+        captchaToken: captchaToken,
+      );
       return Right(user);
     } on NeoAuthException catch (e) {
       return Left(AuthFailure(e.message, code: e.code));

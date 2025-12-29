@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../../../core/theme/neo_widgets.dart';
+import '../../../../core/config/env_config.dart';
 import '../providers/auth_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -100,11 +101,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     
                 const SizedBox(height: NeoSpacing.lg),
                 
-                // Social login section
-                _buildSocialSection(authState)
-                    .animate()
-                    .fadeIn(duration: 500.ms, delay: 300.ms),
-                    
+                // Social login section (only if OAuth enabled)
+                if (EnvConfig.enableOAuth)
+                  _buildSocialSection(authState)
+                      .animate()
+                      .fadeIn(duration: 500.ms, delay: 300.ms),
+                      
                 const SizedBox(height: NeoSpacing.xl),
                 
                 // Register link

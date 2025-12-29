@@ -1134,6 +1134,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                  setState(() {});
               });
             }),
+            _menuItem(Icons.bug_report_outlined, 'Reportar problema', () {
+              Navigator.pop(context);
+              context.push('/report-issue', extra: <String, dynamic>{
+                'route': '/home',
+                'feature': 'profile_menu',
+              });
+            }),
             _menuItem(Icons.settings_outlined, 'Configuración', () {
               Navigator.pop(context);
             }),
