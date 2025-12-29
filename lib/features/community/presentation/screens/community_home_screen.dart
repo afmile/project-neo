@@ -61,6 +61,10 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   int _currentNavIndex = 0; // Internal navigation index
   bool _isSearching = false; // Search mode toggle
   final _searchController = TextEditingController();
+  
+  // Wall post composer
+  final _wallPostController = TextEditingController();
+  bool _isPostingWall = false;
 
   // Removed: Dummy online users for facepile, now using real data
 
@@ -78,6 +82,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   void dispose() {
     _tabController.dispose();
     _searchController.dispose();
+    _wallPostController.dispose();
     super.dispose();
   }
 
@@ -1101,6 +1106,134 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
 
   /// Build Muro tab with paginated wall posts (infinite scroll)
   Widget _buildMuroTab() {
+    return Column(
+      children: [
+        // Composer at top
+        _buildWallPostComposer(),
+        // Feed
+        Expanded(child: _buildWallPostsFeed()),
+      ],
+    );
+  }
+  
+  /// Build wall post composer widget
+  Widget _buildWallPostComposer() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: NeoColors.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: NeoColors.border.withValues(alpha: 0.3),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _wallPostController,
+              maxLines: 3,
+              minLines: 1,
+              enabled: !_isPostingWall,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: '¿Qué estás pensando?',
+                hintStyle: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.4),
+                  fontSize: 14,
+                ),
+                filled: true,
+                fillColor: NeoColors.background,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          SizedBox(
+            height: 44,
+            child: ElevatedButton(
+              onPressed: _isPostingWall ? null : _submitWallPost,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: NeoColors.accent,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: NeoColors.accent.withValues(alpha: 0.5),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+              ),
+              child: _isPostingWall
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Publicar'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  /// Submit wall post
+  Future<void> _submitWallPost() async {
+    final content = _wallPostController.text.trim();
+    if (content.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Escribe algo para publicar'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    
+    setState(() => _isPostingWall = true);
+    
+    final success = await ref
+        .read(wallPostsPaginatedProvider(widget.community.id).notifier)
+        .createPost(content);
+    
+    if (!mounted) return;
+    
+    setState(() => _isPostingWall = false);
+    
+    if (success) {
+      _wallPostController.clear();
+      FocusScope.of(context).unfocus();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('¡Publicado!'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 1),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error al publicar. Inténtalo de nuevo.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+  
+  /// Build wall posts feed
+  Widget _buildWallPostsFeed() {
     final wallPostsAsync = ref.watch(
       wallPostsPaginatedProvider(widget.community.id),
     );
@@ -1225,8 +1358,22 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                       .toggleLike(post.id);
                 },
                 onDelete: () async {
-                  // TODO: Implement delete
-                  print('Delete post: ${post.id}');
+                  final deleted = await ref
+                      .read(
+                        wallPostsPaginatedProvider(
+                          widget.community.id,
+                        ).notifier,
+                      )
+                      .deletePost(post.id);
+                  
+                  if (deleted && mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Post eliminado'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
                 },
               );
             },

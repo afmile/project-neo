@@ -97,6 +97,18 @@ abstract class CommunityRepository {
     String? cursorCreatedAt,
     String? cursorId,
   });
+  
+  /// Create a new wall post
+  Future<Either<Failure, Map<String, dynamic>>> createWallPost({
+    required String communityId,
+    required String content,
+  });
+  
+  /// Toggle like on a wall post (returns true if now liked, false if unliked)
+  Future<Either<Failure, bool>> toggleWallPostLike(String postId);
+  
+  /// Delete a wall post (author only)
+  Future<Either<Failure, void>> deleteWallPost(String postId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -646,6 +658,148 @@ class CommunityRepositoryImpl implements CommunityRepository {
       print('❌ Error fetching paginated wall posts: $e');
       print('📍 Stack trace: $stackTrace');
       return Left(ServerFailure('Error cargando posts: $e'));
+    }
+  }
+  
+  @override
+  Future<Either<Failure, Map<String, dynamic>>> createWallPost({
+    required String communityId,
+    required String content,
+  }) async {
+    try {
+      final userId = _currentUserId;
+      if (userId == null) {
+        return const Left(AuthFailure('Usuario no autenticado'));
+      }
+      
+      if (content.trim().isEmpty) {
+        return const Left(ValidationFailure('El contenido no puede estar vacío'));
+      }
+      
+      final response = await _supabase
+          .from('wall_posts')
+          .insert({
+            'community_id': communityId,
+            'author_id': userId,
+            'content': content.trim(),
+          })
+          .select('''
+            *,
+            author:users_global!wall_posts_author_id_fkey(username, avatar_global_url)
+          ''')
+          .single();
+      
+      // Add likes_count for the model
+      response['likes_count'] = 0;
+      response['comments_count'] = 0;
+      
+      print('✅ Wall post created: ${response['id']}');
+      return Right(response);
+    } on PostgrestException catch (e) {
+      print('❌ Postgres error creating wall post: ${e.message}');
+      return Left(ServerFailure('Error creando post: ${e.message}'));
+    } catch (e) {
+      print('❌ Error creating wall post: $e');
+      return Left(ServerFailure('Error creando post: $e'));
+    }
+  }
+  
+  @override
+  Future<Either<Failure, bool>> toggleWallPostLike(String postId) async {
+    try {
+      final userId = _currentUserId;
+      if (userId == null) {
+        return const Left(AuthFailure('Usuario no autenticado'));
+      }
+      
+      // Check if like exists
+      final existing = await _supabase
+          .from('wall_post_likes')
+          .select('id')
+          .eq('post_id', postId)
+          .eq('user_id', userId)
+          .maybeSingle();
+      
+      if (existing != null) {
+        // Unlike: remove the like
+        await _supabase
+            .from('wall_post_likes')
+            .delete()
+            .eq('id', existing['id']);
+        
+        // Decrement likes_count on wall_posts
+        await _supabase.rpc('decrement_wall_post_likes', params: {'post_id': postId});
+        
+        print('👎 Unliked wall post: $postId');
+        return const Right(false);
+      } else {
+        // Like: add new like
+        await _supabase.from('wall_post_likes').insert({
+          'post_id': postId,
+          'user_id': userId,
+        });
+        
+        // Increment likes_count on wall_posts
+        await _supabase.rpc('increment_wall_post_likes', params: {'post_id': postId});
+        
+        print('👍 Liked wall post: $postId');
+        return const Right(true);
+      }
+    } on PostgrestException catch (e) {
+      // If RPC doesn't exist, just toggle without count update
+      if (e.message.contains('function') && e.message.contains('does not exist')) {
+        print('⚠️ RPC functions not found, toggling without count update');
+        // Fallback: just toggle the like without count update
+        final userId = _currentUserId!;
+        final existing = await _supabase
+            .from('wall_post_likes')
+            .select('id')
+            .eq('post_id', postId)
+            .eq('user_id', userId)
+            .maybeSingle();
+        
+        if (existing != null) {
+          await _supabase.from('wall_post_likes').delete().eq('id', existing['id']);
+          return const Right(false);
+        } else {
+          await _supabase.from('wall_post_likes').insert({
+            'post_id': postId,
+            'user_id': userId,
+          });
+          return const Right(true);
+        }
+      }
+      print('❌ Postgres error toggling like: ${e.message}');
+      return Left(ServerFailure('Error al dar like: ${e.message}'));
+    } catch (e) {
+      print('❌ Error toggling like: $e');
+      return Left(ServerFailure('Error al dar like: $e'));
+    }
+  }
+  
+  @override
+  Future<Either<Failure, void>> deleteWallPost(String postId) async {
+    try {
+      final userId = _currentUserId;
+      if (userId == null) {
+        return const Left(AuthFailure('Usuario no autenticado'));
+      }
+      
+      // Delete the post (RLS should ensure only author can delete)
+      await _supabase
+          .from('wall_posts')
+          .delete()
+          .eq('id', postId)
+          .eq('author_id', userId); // Extra safety, though RLS should handle it
+      
+      print('🗑️ Wall post deleted: $postId');
+      return const Right(null);
+    } on PostgrestException catch (e) {
+      print('❌ Postgres error deleting wall post: ${e.message}');
+      return Left(ServerFailure('Error eliminando post: ${e.message}'));
+    } catch (e) {
+      print('❌ Error deleting wall post: $e');
+      return Left(ServerFailure('Error eliminando post: $e'));
     }
   }
 

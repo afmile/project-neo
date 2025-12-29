@@ -166,20 +166,35 @@ class WallPostsPaginatedNotifier extends StateNotifier<AsyncValue<PaginatedWallP
     await loadFirstPage();
   }
 
-  /// Create a new wall post (optimistic update)
+  /// Create a new wall post (optimistic update + persist)
   Future<bool> createPost(String content) async {
     if (content.trim().isEmpty) {
       print('❌ Cannot create empty post');
       return false;
     }
 
-    // TODO: Implement create post logic
-    // This would need to be added to the repository
-    print('⚠️ Create post not implemented yet');
-    return false;
+    print('📝 Creating wall post...');
+    
+    final result = await repository.createWallPost(
+      communityId: communityId,
+      content: content,
+    );
+    
+    return result.fold(
+      (failure) {
+        print('❌ Failed to create post: ${failure.message}');
+        return false;
+      },
+      (postJson) {
+        print('✅ Post created, refreshing feed');
+        // Refresh to show the new post
+        loadFirstPage();
+        return true;
+      },
+    );
   }
 
-  /// Toggle like on a post (optimistic update)
+  /// Toggle like on a post (optimistic update + persist)
   Future<void> toggleLike(String postId) async {
     final currentState = state.valueOrNull;
     if (currentState == null) return;
@@ -200,8 +215,55 @@ class WallPostsPaginatedNotifier extends StateNotifier<AsyncValue<PaginatedWallP
     updatedPosts[postIndex] = updatedPost;
     state = AsyncValue.data(currentState.copyWith(posts: updatedPosts));
 
-    // TODO: Call repository to persist like
-    // If fails, rollback optimistically
+    // Persist to database
+    final result = await repository.toggleWallPostLike(postId);
+    
+    result.fold(
+      (failure) {
+        print('❌ Failed to toggle like, rolling back: ${failure.message}');
+        // Rollback on failure
+        final rollbackPosts = List<WallPost>.from(currentState.posts);
+        rollbackPosts[postIndex] = post; // Restore original
+        state = AsyncValue.data(currentState.copyWith(posts: rollbackPosts));
+      },
+      (isLiked) {
+        print('✅ Like persisted: $isLiked');
+      },
+    );
+  }
+  
+  /// Delete a wall post
+  Future<bool> deletePost(String postId) async {
+    final currentState = state.valueOrNull;
+    if (currentState == null) return false;
+
+    final postIndex = currentState.posts.indexWhere((p) => p.id == postId);
+    if (postIndex == -1) return false;
+
+    final post = currentState.posts[postIndex];
+    
+    // Optimistic removal
+    final updatedPosts = List<WallPost>.from(currentState.posts);
+    updatedPosts.removeAt(postIndex);
+    state = AsyncValue.data(currentState.copyWith(posts: updatedPosts));
+
+    // Persist deletion
+    final result = await repository.deleteWallPost(postId);
+    
+    return result.fold(
+      (failure) {
+        print('❌ Failed to delete post, rolling back: ${failure.message}');
+        // Rollback: re-insert at original position
+        final rollbackPosts = List<WallPost>.from(updatedPosts);
+        rollbackPosts.insert(postIndex, post);
+        state = AsyncValue.data(currentState.copyWith(posts: rollbackPosts));
+        return false;
+      },
+      (_) {
+        print('✅ Post deleted successfully');
+        return true;
+      },
+    );
   }
 }
 
@@ -215,3 +277,4 @@ final wallPostsPaginatedProvider = StateNotifierProvider.family<WallPostsPaginat
     ref: ref,
   );
 });
+
