@@ -109,6 +109,30 @@ abstract class CommunityRepository {
   
   /// Delete a wall post (author only)
   Future<Either<Failure, void>> deleteWallPost(String postId);
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PROFILE WALL POSTS (separate from community wall)
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  /// Fetch profile wall posts for a user in a community
+  Future<Either<Failure, List<Map<String, dynamic>>>> fetchProfileWallPosts({
+    required String profileUserId,
+    required String communityId,
+    int limit = 50,
+  });
+  
+  /// Create a new profile wall post
+  Future<Either<Failure, Map<String, dynamic>>> createProfileWallPost({
+    required String profileUserId,
+    required String communityId,
+    required String content,
+  });
+  
+  /// Toggle like on a profile wall post
+  Future<Either<Failure, bool>> toggleProfileWallPostLike(String postId);
+  
+  /// Delete a profile wall post
+  Future<Either<Failure, void>> deleteProfileWallPost(String postId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -777,6 +801,210 @@ class CommunityRepositoryImpl implements CommunityRepository {
       return Left(ServerFailure('Error eliminando post: ${e.message}'));
     } catch (e) {
       print('❌ Error deleting wall post: $e');
+      return Left(ServerFailure('Error eliminando post: $e'));
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PROFILE WALL POSTS IMPLEMENTATION
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  @override
+  Future<Either<Failure, List<Map<String, dynamic>>>> fetchProfileWallPosts({
+    required String profileUserId,
+    required String communityId,
+    int limit = 50,
+  }) async {
+    try {
+      print('🔄 Fetching profile wall posts for user: $profileUserId in community: $communityId');
+
+      final response = await _supabase
+          .from('profile_wall_posts')
+          .select('''
+            *,
+            author:users_global!profile_wall_posts_author_id_fkey(username, avatar_global_url),
+            user_likes:profile_wall_post_likes(user_id)
+          ''')
+          .eq('profile_user_id', profileUserId)
+          .eq('community_id', communityId)
+          .order('created_at', ascending: false)
+          .limit(limit);
+
+      final posts = response as List;
+
+      if (posts.isEmpty) {
+        print('✅ No profile wall posts found');
+        return const Right([]);
+      }
+
+      print('📦 Fetched ${posts.length} profile wall posts');
+
+      // Get comment counts and local profiles
+      final postIds = posts.map((p) => p['id'] as String).toList();
+      final authorIds = posts.map((p) => p['author_id'] as String).toSet().toList();
+
+      final commentsCounts = <String, int>{};
+      final localProfiles = <String, Map<String, dynamic>>{};
+
+      await Future.wait([
+        Future(() async {
+          if (postIds.isNotEmpty) {
+            final commentsResponse = await _supabase
+                .from('profile_wall_post_comments')
+                .select('post_id')
+                .inFilter('post_id', postIds);
+            for (final comment in commentsResponse as List) {
+              final postId = comment['post_id'] as String;
+              commentsCounts[postId] = (commentsCounts[postId] ?? 0) + 1;
+            }
+          }
+        }),
+        Future(() async {
+          if (authorIds.isNotEmpty) {
+            final profilesResponse = await _supabase
+                .from('community_members')
+                .select('user_id, nickname, avatar_url')
+                .eq('community_id', communityId)
+                .inFilter('user_id', authorIds);
+            for (final profile in profilesResponse as List) {
+              localProfiles[profile['user_id']] = profile;
+            }
+          }
+        }),
+      ]);
+
+      // Inject data
+      for (final post in posts) {
+        post['comments_count'] = commentsCounts[post['id']] ?? 0;
+        final authorId = post['author_id'];
+        final localProfile = localProfiles[authorId];
+        if (localProfile != null) {
+          if (post['author'] == null) post['author'] = <String, dynamic>{};
+          if (localProfile['nickname'] != null) {
+            post['author']['username'] = localProfile['nickname'];
+          }
+          if (localProfile['avatar_url'] != null) {
+            post['author']['avatar_global_url'] = localProfile['avatar_url'];
+          }
+        }
+      }
+
+      return Right(List<Map<String, dynamic>>.from(posts));
+    } catch (e, stackTrace) {
+      print('❌ Error fetching profile wall posts: $e');
+      print('📍 Stack trace: $stackTrace');
+      return Left(ServerFailure('Error cargando posts de perfil: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, Map<String, dynamic>>> createProfileWallPost({
+    required String profileUserId,
+    required String communityId,
+    required String content,
+  }) async {
+    try {
+      final userId = _currentUserId;
+      if (userId == null) {
+        return const Left(AuthFailure('Usuario no autenticado'));
+      }
+
+      if (content.trim().isEmpty) {
+        return const Left(ValidationFailure('El contenido no puede estar vacío'));
+      }
+
+      final payload = {
+        'profile_user_id': profileUserId,
+        'community_id': communityId,
+        'author_id': userId,
+        'content': content.trim(),
+      };
+
+      print('📝 Insert profile_wall_posts payload: $payload');
+
+      final response = await _supabase
+          .from('profile_wall_posts')
+          .insert(payload)
+          .select('''
+            *,
+            author:users_global!profile_wall_posts_author_id_fkey(username, avatar_global_url)
+          ''')
+          .single();
+
+      response['likes_count'] = 0;
+      response['comments_count'] = 0;
+
+      print('✅ Profile wall post created: ${response['id']}');
+      return Right(response);
+    } on PostgrestException catch (e) {
+      print('❌ Postgres error creating profile wall post: ${e.message}');
+      return Left(ServerFailure('Error creando post: ${e.message}'));
+    } catch (e) {
+      print('❌ Error creating profile wall post: $e');
+      return Left(ServerFailure('Error creando post: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, bool>> toggleProfileWallPostLike(String postId) async {
+    try {
+      final userId = _currentUserId;
+      if (userId == null) {
+        return const Left(AuthFailure('Usuario no autenticado'));
+      }
+
+      final existing = await _supabase
+          .from('profile_wall_post_likes')
+          .select('post_id')
+          .eq('post_id', postId)
+          .eq('user_id', userId)
+          .maybeSingle();
+
+      if (existing != null) {
+        await _supabase
+            .from('profile_wall_post_likes')
+            .delete()
+            .eq('post_id', postId)
+            .eq('user_id', userId);
+        print('👎 Unliked profile wall post: $postId');
+        return const Right(false);
+      } else {
+        await _supabase.from('profile_wall_post_likes').insert({
+          'post_id': postId,
+          'user_id': userId,
+        });
+        print('👍 Liked profile wall post: $postId');
+        return const Right(true);
+      }
+    } on PostgrestException catch (e) {
+      print('❌ Postgres error toggling profile like: ${e.message}');
+      return Left(ServerFailure('Error al dar like: ${e.message}'));
+    } catch (e) {
+      print('❌ Error toggling profile like: $e');
+      return Left(ServerFailure('Error al dar like: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> deleteProfileWallPost(String postId) async {
+    try {
+      final userId = _currentUserId;
+      if (userId == null) {
+        return const Left(AuthFailure('Usuario no autenticado'));
+      }
+
+      await _supabase
+          .from('profile_wall_posts')
+          .delete()
+          .eq('id', postId);
+
+      print('🗑️ Profile wall post deleted: $postId');
+      return const Right(null);
+    } on PostgrestException catch (e) {
+      print('❌ Postgres error deleting profile wall post: ${e.message}');
+      return Left(ServerFailure('Error eliminando post: ${e.message}'));
+    } catch (e) {
+      print('❌ Error deleting profile wall post: $e');
       return Left(ServerFailure('Error eliminando post: $e'));
     }
   }

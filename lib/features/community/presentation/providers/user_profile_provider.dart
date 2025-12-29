@@ -166,13 +166,13 @@ class UserWallPostsNotifier extends StateNotifier<AsyncValue<List<WallPost>>> {
       print('🔍 MURO: Buscando posts con profile_user_id=${filter.userId}');
 
       
-      // Fetch posts with author info and user likes
+      // Fetch posts with author info and user likes from PROFILE_WALL_POSTS table
       final response = await supabase
-          .from('wall_posts')
+          .from('profile_wall_posts')
           .select('''
             *,
-            author:users_global!wall_posts_author_id_fkey(username, avatar_global_url),
-            user_likes:wall_post_likes(user_id)
+            author:users_global!profile_wall_posts_author_id_fkey(username, avatar_global_url),
+            user_likes:profile_wall_post_likes(user_id)
           ''')
           .eq('profile_user_id', filter.userId)
           .eq('community_id', filter.communityId)
@@ -192,7 +192,7 @@ class UserWallPostsNotifier extends StateNotifier<AsyncValue<List<WallPost>>> {
         Future(() async {
           if (postIds.isNotEmpty) {
             final commentsResponse = await supabase
-                .from('wall_post_comments')
+                .from('profile_wall_post_comments')
                 .select('post_id')
                 .inFilter('post_id', postIds);
             
@@ -280,7 +280,7 @@ class UserWallPostsNotifier extends StateNotifier<AsyncValue<List<WallPost>>> {
       
       print('📤 MURO: Insertando post -> $payload');
       
-      await supabase.from('wall_posts').insert(payload);
+      await supabase.from('profile_wall_posts').insert(payload);
 
       print('✅ MURO: Post insertado exitosamente');
       
@@ -301,7 +301,7 @@ class UserWallPostsNotifier extends StateNotifier<AsyncValue<List<WallPost>>> {
       final supabase = Supabase.instance.client;
       
       await supabase
-          .from('wall_posts')
+          .from('profile_wall_posts')
           .delete()
           .eq('id', postId);
 
@@ -346,14 +346,14 @@ class UserWallPostsNotifier extends StateNotifier<AsyncValue<List<WallPost>>> {
       if (wasLiked) {
         // Unlike: Delete the like
         await supabase
-            .from('wall_post_likes')
+            .from('profile_wall_post_likes')
             .delete()
             .eq('post_id', postId)
             .eq('user_id', currentUser.id);
       } else {
         // Like: Insert a new like
         await supabase
-            .from('wall_post_likes')
+            .from('profile_wall_post_likes')
             .insert({
               'post_id': postId,
               'user_id': currentUser.id,
