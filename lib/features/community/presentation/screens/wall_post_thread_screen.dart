@@ -19,6 +19,7 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../core/widgets/telegram_input_bar.dart';
 import '../../../../core/widgets/report_modal.dart';
 import '../providers/community_providers.dart';
+import '../providers/wall_posts_paginated_provider.dart';
 import 'public_user_profile_screen.dart';
 
 class WallPostThreadScreen extends ConsumerStatefulWidget {
@@ -197,8 +198,11 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
         _selectedImage = null;
       });
       
-      // Refresh comments
+      // Refresh comments in thread
       await _fetchComments();
+      
+      // Invalidate feed provider to update comments_count in Home
+      ref.invalidate(wallPostsPaginatedProvider(widget.post.communityId));
       
     } catch (e) {
       debugPrint('Error sending comment: $e');
@@ -485,6 +489,9 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
           ),
         );
         await _fetchComments();
+        
+        // Invalidate Home feed provider to update comments_count
+        ref.invalidate(wallPostsPaginatedProvider(widget.post.communityId));
       }
     } catch (e) {
       debugPrint('Error deleting comment: $e');

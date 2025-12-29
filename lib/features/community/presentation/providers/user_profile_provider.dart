@@ -123,9 +123,9 @@ final userStatsProvider = FutureProvider.family<UserStats, String>((ref, userId)
           .count(CountOption.exact)
           .eq('follower_id', userId),
       
-      // Count wall posts
+      // Count profile wall posts (from profile_wall_posts table)
       supabase
-          .from('wall_posts')
+          .from('profile_wall_posts')
           .count(CountOption.exact)
           .eq('profile_user_id', userId),
     ]);
@@ -156,23 +156,23 @@ class UserWallPostsNotifier extends StateNotifier<AsyncValue<List<WallPost>>> {
 
   /// Refresh wall posts from database
   Future<void> refresh() async {
-    print('🔄 MURO: Iniciando refresh para userId=${filter.userId} en communityId=${filter.communityId}');
+    print('🔄 PROFILE_WALL: Iniciando refresh para userId=${filter.userId} en communityId=${filter.communityId}');
     state = const AsyncValue.loading();
     
     try {
       final supabase = Supabase.instance.client;
       final currentUser = ref.read(currentUserProvider);
 
-      print('🔍 MURO: Buscando posts con profile_user_id=${filter.userId}');
+      print('🔍 PROFILE_WALL: Buscando posts en profile_wall_posts con profile_user_id=${filter.userId}');
 
       
-      // Fetch posts with author info and user likes
+      // Fetch posts with author info and user likes from PROFILE_WALL_POSTS
       final response = await supabase
-          .from('wall_posts')
+          .from('profile_wall_posts')
           .select('''
             *,
-            author:users_global!wall_posts_author_id_fkey(username, avatar_global_url),
-            user_likes:wall_post_likes(user_id)
+            author:users_global!profile_wall_posts_author_id_fkey(username, avatar_global_url),
+            user_likes:profile_wall_post_likes(user_id)
           ''')
           .eq('profile_user_id', filter.userId)
           .eq('community_id', filter.communityId)
@@ -192,7 +192,7 @@ class UserWallPostsNotifier extends StateNotifier<AsyncValue<List<WallPost>>> {
         Future(() async {
           if (postIds.isNotEmpty) {
             final commentsResponse = await supabase
-                .from('wall_post_comments')
+                .from('profile_wall_post_comments')
                 .select('post_id')
                 .inFilter('post_id', postIds);
             
@@ -239,26 +239,26 @@ class UserWallPostsNotifier extends StateNotifier<AsyncValue<List<WallPost>>> {
         }
       }
 
-      print('📦 MURO: Recibidos ${(response as List).length} posts');
+      print('📦 PROFILE_WALL: Recibidos ${(response as List).length} posts');
 
       final posts = WallPostModel.listFromSupabase(
         response as List<dynamic>,
         currentUser?.id,
       );
       
-      print('✅ MURO: Posts procesados exitosamente');
+      print('✅ PROFILE_WALL: Posts procesados exitosamente');
       state = AsyncValue.data(posts);
     } catch (e, stackTrace) {
-      print('❌ ERROR REFRESH MURO: $e');
+      print('❌ ERROR REFRESH PROFILE_WALL: $e');
       print('📍 Stack trace: $stackTrace');
       state = AsyncValue.error(e, stackTrace);
     }
   }
 
-  /// Create a new wall post
+  /// Create a new profile wall post (inserts into profile_wall_posts table)
   Future<bool> createWallPost(String content) async {
     if (content.trim().isEmpty) {
-      print('❌ MURO: Contenido vacío');
+      print('❌ PROFILE_WALL: Contenido vacío');
       return false;
     }
 
@@ -267,7 +267,7 @@ class UserWallPostsNotifier extends StateNotifier<AsyncValue<List<WallPost>>> {
       final currentUser = ref.read(currentUserProvider);
       
       if (currentUser == null) {
-        print('❌ MURO: Usuario no autenticado');
+        print('❌ PROFILE_WALL: Usuario no autenticado');
         return false;
       }
 
@@ -278,30 +278,30 @@ class UserWallPostsNotifier extends StateNotifier<AsyncValue<List<WallPost>>> {
         'content': content.trim(),
       };
       
-      print('📤 MURO: Insertando post -> $payload');
+      print('[CREATE_PROFILE_POST] table=profile_wall_posts community_id=${filter.communityId} author_id=${currentUser.id} profile_user_id=${filter.userId}');
       
-      await supabase.from('wall_posts').insert(payload);
+      await supabase.from('profile_wall_posts').insert(payload);
 
-      print('✅ MURO: Post insertado exitosamente');
+      print('✅ PROFILE_WALL: Post insertado exitosamente en profile_wall_posts');
       
       // Refresh the list to show the new post
       await refresh();
       return true;
     } catch (e, stackTrace) {
-      print('❌ ERROR MURO: $e');
+      print('❌ ERROR PROFILE_WALL: $e');
       print('📍 Stack trace: $stackTrace');
       // Keep current state, don't overwrite with error
       return false;
     }
   }
 
-  /// Delete a wall post
+  /// Delete a profile wall post (from profile_wall_posts table)
   Future<bool> deleteWallPost(String postId) async {
     try {
       final supabase = Supabase.instance.client;
       
       await supabase
-          .from('wall_posts')
+          .from('profile_wall_posts')
           .delete()
           .eq('id', postId);
 
@@ -344,16 +344,16 @@ class UserWallPostsNotifier extends StateNotifier<AsyncValue<List<WallPost>>> {
       }
       
       if (wasLiked) {
-        // Unlike: Delete the like
+        // Unlike: Delete the like from profile_wall_post_likes
         await supabase
-            .from('wall_post_likes')
+            .from('profile_wall_post_likes')
             .delete()
             .eq('post_id', postId)
             .eq('user_id', currentUser.id);
       } else {
-        // Like: Insert a new like
+        // Like: Insert a new like into profile_wall_post_likes
         await supabase
-            .from('wall_post_likes')
+            .from('profile_wall_post_likes')
             .insert({
               'post_id': postId,
               'user_id': currentUser.id,

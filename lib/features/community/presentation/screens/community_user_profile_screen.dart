@@ -15,6 +15,7 @@ import '../../domain/entities/user_title_tag.dart';
 import '../../domain/entities/wall_post.dart';
 import '../../domain/entities/pinned_content.dart';
 import '../providers/user_profile_provider.dart';
+import '../providers/wall_posts_paginated_provider.dart';
 import '../widgets/user_title_tag_widget.dart';
 import '../widgets/wall_post_card.dart';
 import '../widgets/pinned_content_card.dart';
@@ -1145,6 +1146,9 @@ class _CommunityUserProfileScreenState
                                     communityId: widget.communityId,
                                   )).notifier)
                                   .refresh();
+                              
+                              // Also invalidate Home feed provider
+                              ref.invalidate(wallPostsPaginatedProvider(widget.communityId));
                               
                               if (context.mounted) {
                                 Navigator.pop(context);
