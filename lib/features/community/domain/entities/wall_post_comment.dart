@@ -26,6 +26,12 @@ class WallPostComment extends Equatable {
   
   /// When the comment was created
   final DateTime createdAt;
+  
+  /// Number of likes on this comment
+  final int likesCount;
+  
+  /// Whether the current user has liked this comment
+  final bool isLikedByCurrentUser;
 
   const WallPostComment({
     required this.id,
@@ -35,7 +41,33 @@ class WallPostComment extends Equatable {
     this.authorAvatar,
     required this.content,
     required this.createdAt,
+    this.likesCount = 0,
+    this.isLikedByCurrentUser = false,
   });
+
+  WallPostComment copyWith({
+    String? id,
+    String? postId,
+    String? authorId,
+    String? authorName,
+    String? authorAvatar,
+    String? content,
+    DateTime? createdAt,
+    int? likesCount,
+    bool? isLikedByCurrentUser,
+  }) {
+    return WallPostComment(
+      id: id ?? this.id,
+      postId: postId ?? this.postId,
+      authorId: authorId ?? this.authorId,
+      authorName: authorName ?? this.authorName,
+      authorAvatar: authorAvatar ?? this.authorAvatar,
+      content: content ?? this.content,
+      createdAt: createdAt ?? this.createdAt,
+      likesCount: likesCount ?? this.likesCount,
+      isLikedByCurrentUser: isLikedByCurrentUser ?? this.isLikedByCurrentUser,
+    );
+  }
 
   @override
   List<Object?> get props => [
@@ -46,5 +78,8 @@ class WallPostComment extends Equatable {
         authorAvatar,
         content,
         createdAt,
+        likesCount,
+        isLikedByCurrentUser,
       ];
 }
+

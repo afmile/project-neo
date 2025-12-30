@@ -21,6 +21,8 @@ class WallPostCard extends ConsumerStatefulWidget {
   final VoidCallback? onDelete;
   final bool canDelete;
   final bool isThreadView;
+  /// If true, uses profile_wall_post_* tables instead of wall_post_*
+  final bool isProfilePost;
 
   const WallPostCard({
     super.key,
@@ -30,7 +32,9 @@ class WallPostCard extends ConsumerStatefulWidget {
     this.onDelete,
     this.canDelete = false,
     this.isThreadView = false,
+    this.isProfilePost = false,
   });
+
 
   @override
   ConsumerState<WallPostCard> createState() => _WallPostCardState();
@@ -58,13 +62,51 @@ class _WallPostCardState extends ConsumerState<WallPostCard> {
 
       try {
         final supabase = Supabase.instance.client;
+        final currentUserId = supabase.auth.currentUser?.id;
+        
+        // Choose table and FK based on post source
+        final commentsTable = widget.isProfilePost 
+            ? 'profile_wall_post_comments' 
+            : 'wall_post_comments';
+        final authorFk = widget.isProfilePost
+            ? 'profile_wall_post_comments_author_id_fkey'
+            : 'wall_post_comments_author_id_fkey';
+        final likesTable = widget.isProfilePost
+            ? 'profile_wall_post_comment_likes'
+            : 'wall_post_comment_likes';
+        
         final response = await supabase
-            .from('wall_post_comments')
-            .select('*, author:users_global!wall_post_comments_author_id_fkey(username, avatar_global_url)')
+            .from(commentsTable)
+            .select('*, author:users_global!$authorFk(username, avatar_global_url), user_likes:$likesTable(user_id)')
             .eq('post_id', widget.post.id)
             .order('created_at', ascending: true);
 
-        final comments = WallPostCommentModel.listFromSupabase(response as List<dynamic>);
+        final commentsList = response as List<dynamic>;
+        
+        // Fetch local profiles for all comment authors
+        if (commentsList.isNotEmpty) {
+          final authorIds = commentsList.map((c) => c['author_id'] as String).toSet().toList();
+          
+          final localProfiles = await supabase
+              .from('community_members')
+              .select('user_id, nickname, avatar_url')
+              .eq('community_id', widget.post.communityId)
+              .inFilter('user_id', authorIds);
+          
+          // Create lookup map
+          final profileMap = <String, Map<String, dynamic>>{};
+          for (final profile in localProfiles as List) {
+            profileMap[profile['user_id']] = profile;
+          }
+          
+          // Inject local_profile into each comment
+          for (final comment in commentsList) {
+            final authorId = comment['author_id'] as String;
+            comment['local_profile'] = profileMap[authorId];
+          }
+        }
+
+        final comments = WallPostCommentModel.listFromSupabase(commentsList, currentUserId);
 
         setState(() {
           _comments = comments;
@@ -80,6 +122,7 @@ class _WallPostCardState extends ConsumerState<WallPostCard> {
     }
   }
 
+
   void _navigateToThread(bool autoFocus) {
     if (widget.isThreadView) return; // Prevent navigation if already in thread view
     
@@ -88,10 +131,12 @@ class _WallPostCardState extends ConsumerState<WallPostCard> {
         builder: (context) => WallPostThreadScreen(
           post: widget.post,
           autoFocusInput: autoFocus,
+          isProfilePost: widget.isProfilePost,
         ),
       ),
     );
   }
+
 
   @override
   Widget build(BuildContext context) {

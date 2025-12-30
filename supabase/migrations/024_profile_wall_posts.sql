@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS public.profile_wall_post_comments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     post_id UUID NOT NULL REFERENCES public.profile_wall_posts(id) ON DELETE CASCADE,
     author_id UUID NOT NULL REFERENCES public.users_global(id) ON DELETE CASCADE,
+    community_id UUID NOT NULL REFERENCES public.communities(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,

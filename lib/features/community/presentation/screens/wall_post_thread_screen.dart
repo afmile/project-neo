@@ -25,16 +25,20 @@ import 'public_user_profile_screen.dart';
 class WallPostThreadScreen extends ConsumerStatefulWidget {
   final WallPost post;
   final bool autoFocusInput;
+  /// If true, uses profile_wall_post_* tables instead of wall_post_*
+  final bool isProfilePost;
 
   const WallPostThreadScreen({
     super.key,
     required this.post,
     this.autoFocusInput = false,
+    this.isProfilePost = false,
   });
 
   @override
   ConsumerState<WallPostThreadScreen> createState() => _WallPostThreadScreenState();
 }
+
 
 class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
   final TextEditingController _commentController = TextEditingController();
@@ -65,6 +69,7 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
   }
   
   /// Toggle like on the parent post
+  /// Uses profile_wall_post_likes or wall_post_likes based on isProfilePost
   Future<void> _toggleLike() async {
     // Optimistic update
     setState(() {
@@ -72,30 +77,47 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
       _likesCount += _isLiked ? 1 : -1;
     });
     
-    // Persist via repository
-    final repository = ref.read(communityRepositoryProvider);
-    final result = await repository.toggleWallPostLike(widget.post.id);
-    
-    result.fold(
-      (failure) {
-        // Rollback on error
-        setState(() {
-          _isLiked = !_isLiked;
-          _likesCount += _isLiked ? 1 : -1;
+    try {
+      final supabase = Supabase.instance.client;
+      final userId = supabase.auth.currentUser?.id;
+      if (userId == null) throw Exception('User not authenticated');
+      
+      // Choose table based on post source
+      final likesTable = widget.isProfilePost 
+          ? 'profile_wall_post_likes' 
+          : 'wall_post_likes';
+      
+      if (!_isLiked) {
+        // Unlike: delete the like
+        await supabase
+            .from(likesTable)
+            .delete()
+            .eq('post_id', widget.post.id)
+            .eq('user_id', userId);
+        debugPrint('👎 Unliked from $likesTable');
+      } else {
+        // Like: insert
+        await supabase.from(likesTable).insert({
+          'post_id': widget.post.id,
+          'user_id': userId,
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${failure.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      },
-      (isLiked) {
-        // Server confirmed, already updated optimistically
-        debugPrint('Like toggled: $isLiked');
-      },
-    );
+        debugPrint('👍 Liked in $likesTable');
+      }
+    } catch (e) {
+      // Rollback on error
+      setState(() {
+        _isLiked = !_isLiked;
+        _likesCount += _isLiked ? 1 : -1;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
+
 
   @override
   void dispose() {
@@ -107,13 +129,52 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
   Future<void> _fetchComments() async {
     try {
       final supabase = Supabase.instance.client;
+      final currentUserId = supabase.auth.currentUser?.id;
+      
+      // Choose tables and FKs based on post source
+      final commentsTable = widget.isProfilePost 
+          ? 'profile_wall_post_comments' 
+          : 'wall_post_comments';
+      final authorFk = widget.isProfilePost
+          ? 'profile_wall_post_comments_author_id_fkey'
+          : 'wall_post_comments_author_id_fkey';
+      final likesTable = widget.isProfilePost
+          ? 'profile_wall_post_comment_likes'
+          : 'wall_post_comment_likes';
+      
+      // Fetch comments with author and likes
       final response = await supabase
-          .from('wall_post_comments')
-          .select('*, author:users_global!wall_post_comments_author_id_fkey(username, avatar_global_url)')
+          .from(commentsTable)
+          .select('*, author:users_global!$authorFk(username, avatar_global_url), user_likes:$likesTable(user_id)')
           .eq('post_id', widget.post.id)
           .order('created_at', ascending: true);
+      
+      final commentsList = response as List<dynamic>;
+      
+      // Fetch local profiles for all comment authors
+      if (commentsList.isNotEmpty) {
+        final authorIds = commentsList.map((c) => c['author_id'] as String).toSet().toList();
+        
+        final localProfiles = await supabase
+            .from('community_members')
+            .select('user_id, nickname, avatar_url')
+            .eq('community_id', widget.post.communityId)
+            .inFilter('user_id', authorIds);
+        
+        // Create lookup map
+        final profileMap = <String, Map<String, dynamic>>{};
+        for (final profile in localProfiles as List) {
+          profileMap[profile['user_id']] = profile;
+        }
+        
+        // Inject local_profile into each comment
+        for (final comment in commentsList) {
+          final authorId = comment['author_id'] as String;
+          comment['local_profile'] = profileMap[authorId];
+        }
+      }
 
-      final comments = WallPostCommentModel.listFromSupabase(response as List<dynamic>);
+      final comments = WallPostCommentModel.listFromSupabase(commentsList, currentUserId);
 
       if (mounted) {
         setState(() {
@@ -130,6 +191,8 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
       }
     }
   }
+
+
 
   Future<void> _pickImage() async {
     try {
@@ -176,7 +239,11 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
         imageUrl = supabase.storage.from('wall_media').getPublicUrl(fileName);
       }
 
-      // Insert comment
+      // Insert comment - use correct table based on post source
+      final commentsTable = widget.isProfilePost 
+          ? 'profile_wall_post_comments' 
+          : 'wall_post_comments';
+      
       // Note: If the table doesn't have image_url yet, this might need an update. 
       // For now, appending image URL to content as Markdown if image exists is a safe fallback 
       // ensuring it's visible even without schema change.
@@ -186,11 +253,19 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
         finalContent += '![Imagen]($imageUrl)';
       }
 
-      await supabase.from('wall_post_comments').insert({
+      // Build insert payload - profile_wall_post_comments requires community_id
+      final commentPayload = <String, dynamic>{
         'post_id': widget.post.id,
         'author_id': currentUser.id,
         'content': finalContent,
-      });
+      };
+      
+      // Add community_id for profile comments (required by NOT NULL constraint)
+      if (widget.isProfilePost) {
+        commentPayload['community_id'] = widget.post.communityId;
+      }
+
+      await supabase.from(commentsTable).insert(commentPayload);
 
       // Reset UI
       _commentController.clear();
@@ -463,10 +538,35 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
                 
                 const SizedBox(height: 8),
                 
-                const Icon(
-                  Icons.favorite_border,
-                  size: 18,
-                  color: Colors.grey,
+                // Comment like button
+                GestureDetector(
+                  onTap: () => _toggleCommentLike(comment),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        comment.isLikedByCurrentUser 
+                            ? Icons.favorite 
+                            : Icons.favorite_border,
+                        size: 18,
+                        color: comment.isLikedByCurrentUser 
+                            ? Colors.red 
+                            : Colors.grey,
+                      ),
+                      if (comment.likesCount > 0) ...[
+                        const SizedBox(width: 4),
+                        Text(
+                          '${comment.likesCount}',
+                          style: TextStyle(
+                            color: comment.isLikedByCurrentUser 
+                                ? Colors.red 
+                                : Colors.grey,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -479,7 +579,13 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
   Future<void> _deleteComment(String commentId) async {
     try {
       final supabase = Supabase.instance.client;
-      await supabase.from('wall_post_comments').delete().eq('id', commentId);
+      
+      // Choose table based on post source
+      final commentsTable = widget.isProfilePost 
+          ? 'profile_wall_post_comments' 
+          : 'wall_post_comments';
+      
+      await supabase.from(commentsTable).delete().eq('id', commentId);
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -503,6 +609,65 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
           ),
         );
       }
+    }
+  }
+
+  /// Toggle like on a comment (optimistic UI)
+  Future<void> _toggleCommentLike(WallPostComment comment) async {
+    if (_comments == null) return;
+    
+    final supabase = Supabase.instance.client;
+    final userId = supabase.auth.currentUser?.id;
+    if (userId == null) return;
+    
+    final wasLiked = comment.isLikedByCurrentUser;
+    
+    // Optimistic update
+    setState(() {
+      final index = _comments!.indexWhere((c) => c.id == comment.id);
+      if (index != -1) {
+        _comments![index] = comment.copyWith(
+          isLikedByCurrentUser: !wasLiked,
+          likesCount: wasLiked ? comment.likesCount - 1 : comment.likesCount + 1,
+        );
+      }
+    });
+    
+    try {
+      // Choose table based on post source
+      final likesTable = widget.isProfilePost 
+          ? 'profile_wall_post_comment_likes' 
+          : 'wall_post_comment_likes';
+      
+      if (wasLiked) {
+        // Unlike: delete
+        await supabase
+            .from(likesTable)
+            .delete()
+            .eq('comment_id', comment.id)
+            .eq('user_id', userId);
+        debugPrint('👎 Unliked comment from $likesTable');
+      } else {
+        // Like: insert
+        await supabase.from(likesTable).insert({
+          'comment_id': comment.id,
+          'user_id': userId,
+          'community_id': widget.post.communityId,
+        });
+        debugPrint('👍 Liked comment in $likesTable');
+      }
+    } catch (e) {
+      debugPrint('❌ Error toggling comment like: $e');
+      // Rollback on error
+      setState(() {
+        final index = _comments!.indexWhere((c) => c.id == comment.id);
+        if (index != -1) {
+          _comments![index] = comment.copyWith(
+            isLikedByCurrentUser: wasLiked,
+            likesCount: wasLiked ? comment.likesCount : comment.likesCount - 1,
+          );
+        }
+      });
     }
   }
 

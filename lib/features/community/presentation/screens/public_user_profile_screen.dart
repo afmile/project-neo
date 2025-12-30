@@ -145,11 +145,11 @@ class _PublicUserProfileScreenState
         });
       }
 
-      // PHASE 2: CONTENT (Wall Posts)
+      // PHASE 2: CONTENT (Profile Wall Posts - from profile_wall_posts table)
       try {
         final responses = await Future.wait<dynamic>([
-           supabase.from('wall_posts').count().eq('author_id', widget.userId).eq('community_id', widget.communityId),
-           supabase.from('wall_posts').select('*, author:users_global!wall_posts_author_id_fkey(*)').eq('author_id', widget.userId).eq('community_id', widget.communityId).order('created_at', ascending: false).limit(20),
+           supabase.from('profile_wall_posts').count().eq('profile_user_id', widget.userId).eq('community_id', widget.communityId),
+           supabase.from('profile_wall_posts').select('*, author:users_global!profile_wall_posts_author_id_fkey(*)').eq('profile_user_id', widget.userId).eq('community_id', widget.communityId).order('created_at', ascending: false).limit(20),
         ]);
         
         final countResponse = responses[0] as int;
@@ -169,7 +169,7 @@ class _PublicUserProfileScreenState
           });
         }
       } catch (e) {
-        debugPrint('Error fetching posts: $e');
+        debugPrint('Error fetching profile posts: $e');
         if (mounted) setState(() => _isLoading = false);
       }
 
@@ -609,7 +609,10 @@ class _PublicUserProfileScreenState
             itemBuilder: (context, index) {
               return Padding(
                 padding: const EdgeInsets.only(bottom: NeoSpacing.md),
-                child: WallPostCard(post: _wallPosts[index]),
+                child: WallPostCard(
+                  post: _wallPosts[index],
+                  isProfilePost: true,  // Profile wall uses profile_wall_post_* tables
+                ),
               );
             },
           ),

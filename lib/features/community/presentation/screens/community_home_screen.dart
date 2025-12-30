@@ -36,6 +36,7 @@ import 'community_studio_screen.dart';
 import '../../../chat/presentation/screens/chat_room_screen.dart'; // NEW
 import '../../../chat/domain/entities/community_chat_room_entity.dart'; // NEW
 import '../../../../core/beta/beta.dart'; // Beta feedback button
+import '../widgets/notification_bell_widget.dart'; // Notifications
 
 class CommunityHomeScreen extends ConsumerStatefulWidget {
   final CommunityEntity community;
@@ -186,6 +187,11 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
         onPressed: () => Navigator.of(context).pop(),
       ),
       actions: [
+        // Notification bell
+        NotificationBellWidget(
+          communityId: widget.community.id,
+          iconColor: Colors.white,
+        ),
         // Neo Studio button for owners
         if (_isOwner())
           IconButton(
