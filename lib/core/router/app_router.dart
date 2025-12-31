@@ -42,7 +42,12 @@ import '../../features/chat/domain/entities/chat_entity.dart';
 import '../../features/chat/presentation/screens/chat_conversation_screen.dart';
 import '../../features/chat/presentation/screens/create_private_room_screen.dart';
 import '../../features/community/presentation/screens/community_settings_screen.dart';
+import '../../features/community/presentation/screens/community_settings_hub_screen.dart';
+import '../../features/community/presentation/screens/user_settings_screen.dart';
 import '../../features/community/presentation/screens/local_edit_profile_screen.dart';
+import '../../features/community/presentation/screens/user_community_titles_settings_screen.dart';
+import '../../features/community/presentation/screens/request_title_screen.dart';
+import '../../features/community/presentation/screens/title_requests_management_screen.dart';
 import '../beta/beta.dart';
 
 /// Global navigator key
@@ -314,7 +319,43 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
 
-      // Community Settings
+      // User Settings (personal config from profile)
+      GoRoute(
+        path: '/community/:id/user-settings',
+        name: 'user-settings',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) {
+          final extras = state.extra as Map<String, dynamic>;
+          return UserSettingsScreen(
+            communityId: state.pathParameters['id']!,
+            communityName: extras['name'] as String,
+            themeColor: extras['color'] as Color,
+          );
+        },
+      ),
+
+      // Community Management (admin from home gear)
+      GoRoute(
+        path: '/community/:id/management',
+        name: 'community-management',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) {
+          final extras = state.extra as Map<String, dynamic>;
+          return CommunityManagementScreen(
+            community: extras['community'] as CommunityEntity,
+          );
+        },
+      ),
+
+      // Community Settings Hub (deprecated - redirect to management)
+      GoRoute(
+        path: '/community/:id/settings-hub',
+        name: 'community-settings-hub',
+        parentNavigatorKey: rootNavigatorKey,
+        redirect: (context, state) => '/community/${state.pathParameters['id']}/management',
+      ),
+
+      // Community Settings (notifications only - kept for backward compat)
       GoRoute(
         path: '/community/:id/settings',
         name: 'community-settings',
@@ -328,6 +369,70 @@ final routerProvider = Provider<GoRouter>((ref) {
           );
         },
       ),
+
+      // Edit Community (owners only)
+      GoRoute(
+        path: '/community/:id/edit',
+        name: 'edit-community',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) {
+          final extras = state.extra as Map<String, dynamic>;
+          // TODO: Create EditCommunityScreen
+          return Scaffold(
+            appBar: AppBar(title: const Text('Editar Comunidad')),
+            body: const Center(child: Text('Próximamente')),
+          );
+        },
+      ),
+
+      // User Titles Settings
+      GoRoute(
+        path: '/community/:communityId/titles-settings',
+        name: 'user-titles-settings',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) {
+          final extras = state.extra as Map<String, dynamic>;
+          return UserCommunityTitlesSettingsScreen(
+            communityId: state.pathParameters['communityId']!,
+            communityName: extras['name'] as String,
+            themeColor: extras['color'] as Color,
+          );
+        },
+      ),
+
+        // Request title route (member creates custom title request)
+        GoRoute(
+          path: '/community/:communityId/request-title',
+          name: 'request-title',
+          parentNavigatorKey: rootNavigatorKey,
+          builder: (context, state) {
+            final communityId = state.pathParameters['communityId']!;
+            final extra = state.extra as Map<String, dynamic>;
+            
+            return RequestTitleScreen(
+              communityId: communityId,
+              communityName: extra['name'] as String,
+              themeColor: extra['color'] as Color,
+            );
+          },
+        ),
+
+        // Title requests management route (leaders approve/reject)
+        GoRoute(
+          path: '/community/:communityId/manage-title-requests',
+          name: 'manage-title-requests',
+          parentNavigatorKey: rootNavigatorKey,
+          builder: (context, state) {
+            final communityId = state.pathParameters['communityId']!;
+            final extra = state.extra as Map<String, dynamic>;
+            
+            return TitleRequestsManagementScreen(
+              communityId: communityId,
+              communityName: extra['name'] as String,
+              themeColor: extra['color'] as Color,
+            );
+          },
+        ),
       
       // Report Issue
       GoRoute(

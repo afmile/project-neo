@@ -31,6 +31,7 @@ class MemberTitleModel {
           : null,
       isActive: json['is_active'] as bool? ?? true,
       sortOrder: json['sort_order'] as int? ?? 0,
+      isVisible: json['is_visible'] as bool? ?? true,
     );
   }
 
@@ -52,6 +53,7 @@ class MemberTitleModel {
       'expires_at': memberTitle.expiresAt?.toIso8601String(),
       'is_active': memberTitle.isActive,
       'sort_order': memberTitle.sortOrder,
+      'is_visible': memberTitle.isVisible,
     };
   }
 }

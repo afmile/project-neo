@@ -17,6 +17,7 @@ class MemberTitle extends Equatable {
   final DateTime? expiresAt;
   final bool isActive;
   final int sortOrder;
+  final bool isVisible;
 
   const MemberTitle({
     required this.id,
@@ -28,6 +29,7 @@ class MemberTitle extends Equatable {
     this.expiresAt,
     this.isActive = true,
     this.sortOrder = 0,
+    this.isVisible = true,
   });
 
   /// Check if this title is expired
@@ -37,7 +39,7 @@ class MemberTitle extends Equatable {
   }
 
   /// Check if this title should be displayed
-  bool get shouldDisplay => isActive && !isExpired;
+  bool get shouldDisplay => isActive && !isExpired && isVisible;
 
   @override
   List<Object?> get props => [
@@ -50,5 +52,6 @@ class MemberTitle extends Equatable {
         expiresAt,
         isActive,
         sortOrder,
+        isVisible,
       ];
 }

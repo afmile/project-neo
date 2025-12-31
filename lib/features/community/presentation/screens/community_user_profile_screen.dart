@@ -5,12 +5,14 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../../../shared/widgets/destructive_action_dialog.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/user_profile_provider.dart';
 import '../providers/wall_posts_paginated_provider.dart';
+import '../providers/community_providers.dart';
 import '../widgets/profile_header_section.dart';
 import '../widgets/profile_stats_row.dart';
 import '../widgets/profile_bio_card.dart';
@@ -100,7 +102,7 @@ class _CommunityUserProfileScreenState
                     IconButton(
                       icon: const Icon(Icons.settings, color: NeoColors.textPrimary),
                       onPressed: () {
-                        // TODO: Navigate to settings
+                        _showProfileSettingsMenu(context);
                       },
                     ),
                 ],
@@ -249,6 +251,160 @@ class _CommunityUserProfileScreenState
       userId: widget.userId,
       communityId: widget.communityId,
     )));
+  }
+
+  void _showProfileSettingsMenu(BuildContext context) {
+    final community = ref.read(communityByIdProvider(widget.communityId));
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: NeoColors.card,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.settings,
+                      color: NeoColors.textPrimary,
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Configuración de Perfil',
+                      style: TextStyle(
+                        color: NeoColors.textPrimary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(color: NeoColors.border, height: 1),
+              
+              // Títulos option
+              ListTile(
+                leading: const Icon(
+                  Icons.workspace_premium_outlined,
+                  color: NeoColors.accent,
+                ),
+                title: const Text(
+                  'Títulos',
+                  style: TextStyle(color: NeoColors.textPrimary),
+                ),
+                subtitle: const Text(
+                  'Gestiona tus títulos de la comunidad',
+                  style: TextStyle(color: NeoColors.textSecondary, fontSize: 12),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  
+                  // Defer navigation until sheet is fully closed
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    community.when(
+                      data: (comm) {
+                        if (comm != null) {
+                          context.pushNamed(
+                            'user-titles-settings',
+                            pathParameters: {'communityId': widget.communityId},
+                            extra: {
+                              'name': comm.title,
+                              'color': _parseColor(comm.theme.primaryColor),
+                            },
+                          );
+                        }
+                      },
+                      loading: () {},
+                      error: (_, __) {},
+                    );
+                  });
+                },
+              ),
+              
+              // Solicitar Título option (NEW)
+              ListTile(
+                leading: const Icon(
+                  Icons.add_circle_outline,
+                  color: Colors.green,
+                ),
+                title: const Text(
+                  'Solicitar Título',
+                  style: TextStyle(color: NeoColors.textPrimary),
+                ),
+                subtitle: const Text(
+                  'Crea un título personalizado',
+                  style: TextStyle(color: NeoColors.textSecondary, fontSize: 12),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  
+                  // Defer navigation until sheet is fully closed
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    community.when(
+                      data: (comm) {
+                        if (comm != null) {
+                          context.pushNamed(
+                            'request-title',
+                            pathParameters: {'communityId': widget.communityId},
+                            extra: {
+                              'name': comm.title,
+                              'color': _parseColor(comm.theme.primaryColor),
+                            },
+                          );
+                        }
+                      },
+                      loading: () {},
+                      error: (_, __) {},
+                    );
+                  });
+                },
+              ),
+              
+              // Editar Perfil option
+              ListTile(
+                leading: const Icon(
+                  Icons.edit_outlined,
+                  color: Colors.white,
+                ),
+                title: const Text(
+                  'Editar Perfil',
+                  style: TextStyle(color: NeoColors.textPrimary),
+                ),
+                subtitle: const Text(
+                  'Cambia tu identidad local',
+                  style: TextStyle(color: NeoColors.textSecondary, fontSize: 12),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _navigateToEditProfile();
+                },
+              ),
+              
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _parseColor(String hexColor) {
+    try {
+      final hex = hexColor.replaceAll('#', '');
+      final fullHex = hex.length == 6 ? 'FF$hex' : hex;
+      return Color(int.parse(fullHex, radix: 16));
+    } catch (e) {
+      return NeoColors.accent;
+    }
   }
 
   Widget _buildErrorState() {

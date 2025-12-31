@@ -6,8 +6,10 @@ library;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/entities/community_title.dart';
 import '../../domain/entities/member_title.dart';
+import '../../domain/entities/title_request.dart';
 import '../models/community_title_model.dart';
 import '../models/member_title_model.dart';
+import '../models/title_request_model.dart';
 
 class TitlesRepository {
   final SupabaseClient _supabase;
@@ -184,6 +186,91 @@ class TitlesRepository {
     }
   }
 
+  /// Update title visibility (user can hide/show their own titles)
+  Future<bool> updateTitleVisibility({
+    required String assignmentId,
+    required bool isVisible,
+  }) async {
+    try {
+      await _supabase
+          .from('community_member_titles')
+          .update({'is_visible': isVisible})
+          .eq('id', assignmentId);
+
+      return true;
+    } catch (e) {
+      print('❌ ERROR updateTitleVisibility: $e');
+      return false;
+    }
+  }
+
+  /// Batch update multiple title sort orders
+  /// 
+  /// This is more efficient than calling updateTitleSortOrder multiple times
+  /// when reordering titles via drag-and-drop
+  Future<bool> batchUpdateTitleOrders({
+    required List<({String id, int order})> updates,
+  }) async {
+    try {
+      // Supabase doesn't support batch updates directly, so we do them sequentially
+      // In a production app, you might want to use a stored procedure for this
+      for (final update in updates) {
+        await _supabase
+            .from('community_member_titles')
+            .update({'sort_order': update.order})
+            .eq('id', update.id);
+      }
+
+      return true;
+    } catch (e) {
+      print('❌ ERROR batchUpdateTitleOrders: $e');
+      return false;
+    }
+  }
+
+  /// Fetch all user titles including hidden ones (for settings screen)
+  Future<List<MemberTitle>> fetchUserTitlesWithHidden({
+    required String userId,
+    required String communityId,
+  }) async {
+    try {
+      final response = await _supabase
+          .from('community_member_titles')
+          .select('''
+            *,
+            title:community_titles(*)
+          ''')
+          .eq('member_user_id', userId)
+          .eq('community_id', communityId)
+          .eq('is_active', true)
+          .order('sort_order', ascending: true);
+
+      final memberTitles = MemberTitleModel.listFromSupabase(response as List<dynamic>);
+
+      // Filter out expired titles and sort
+      final validTitles = memberTitles
+          .where((mt) => !mt.isExpired)
+          .toList()
+        ..sort((a, b) {
+          // First by sort_order
+          final sortOrderCompare = a.sortOrder.compareTo(b.sortOrder);
+          if (sortOrderCompare != 0) return sortOrderCompare;
+          
+          // Then by priority (higher first)
+          final priorityCompare = b.title.priority.compareTo(a.title.priority);
+          if (priorityCompare != 0) return priorityCompare;
+          
+          // Finally by assigned_at (newer first)
+          return b.assignedAt.compareTo(a.assignedAt);
+        });
+
+      return validTitles;
+    } catch (e) {
+      print('❌ ERROR fetchUserTitlesWithHidden: $e');
+      return [];
+    }
+  }
+
   // ═════════════════════════════════════════════════════════════════════════
   // TITLE MANAGEMENT (Admin/Leader only)
   // ═════════════════════════════════════════════════════════════════════════
@@ -303,4 +390,211 @@ class TitlesRepository {
       return false;
     }
   }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // TITLE REQUESTS OPERATIONS
+  // ═════════════════════════════════════════════════════════════════════════
+
+  /// Create a new title request
+  /// 
+  /// Member proposes a custom title that requires leader approval
+  Future<TitleRequest?> createTitleRequest({
+    required String communityId,
+    required String userId,
+    required String titleText,
+    required String textColor,
+    required String backgroundColor,
+  }) async {
+    try {
+      final data = TitleRequestModel.toSupabaseInsert(
+        communityId: communityId,
+        memberUserId: userId,
+        titleText: titleText,
+        textColor: textColor,
+        backgroundColor: backgroundColor,
+      );
+
+      final response = await _supabase
+          .from('title_requests')
+          .insert(data)
+          .select()
+          .single();
+
+      return TitleRequestModel.fromSupabase(response);
+    } catch (e) {
+      print('❌ ERROR createTitleRequest: $e');
+      return null;
+    }
+  }
+
+  /// Fetch all title requests for a specific user in a community
+  /// 
+  /// Returns requests ordered by creation date (newest first)
+  Future<List<TitleRequest>> fetchUserTitleRequests({
+    required String userId,
+    required String communityId,
+  }) async {
+    try {
+      final response = await _supabase
+          .from('title_requests')
+          .select()
+          .eq('member_user_id', userId)
+          .eq('community_id', communityId)
+          .order('created_at', ascending: false);
+
+      return TitleRequestModel.listFromSupabase(response as List<dynamic>);
+    } catch (e) {
+      print('❌ ERROR fetchUserTitleRequests: $e');
+      return [];
+    }
+  }
+
+  /// Fetch all pending title requests for a community
+  /// 
+  /// Only accessible by leaders (enforced by RLS)
+  Future<List<TitleRequest>> fetchPendingTitleRequests({
+    required String communityId,
+  }) async {
+    try {
+      final response = await _supabase
+          .from('title_requests')
+          .select()
+          .eq('community_id', communityId)
+          .eq('status', 'pending')
+          .order('created_at', ascending: true);
+
+      return TitleRequestModel.listFromSupabase(response as List<dynamic>);
+    } catch (e) {
+      print('❌ ERROR fetchPendingTitleRequests: $e');
+      return [];
+    }
+  }
+
+  /// Approve a title request
+  /// 
+  /// Creates a new title in community_titles and assigns it to the member
+  /// Updates the request status to 'approved'
+  Future<bool> approveTitleRequest({
+    required String requestId,
+    required String leaderId,
+  }) async {
+    try {
+      // 1. Fetch the request
+      final requestResponse = await _supabase
+          .from('title_requests')
+          .select()
+          .eq('id', requestId)
+          .single();
+
+      final request = TitleRequestModel.fromSupabase(requestResponse);
+
+      // 2. Create title in community_titles
+      final titleData = {
+        'community_id': request.communityId,
+        'name': request.titleText,
+        'slug': _generateSlug(request.titleText),
+        'description': 'Custom title created from member request',
+        'style': {
+          'bg': request.backgroundColor,
+          'fg': request.textColor,
+        },
+        'priority': 0,
+        'is_active': true,
+        'created_by': leaderId,
+      };
+
+      final titleResponse = await _supabase
+          .from('community_titles')
+          .insert(titleData)
+          .select()
+          .single();
+
+      final titleId = titleResponse['id'] as String;
+
+      // 3. Assign title to member
+      final assignmentData = {
+        'community_id': request.communityId,
+        'member_user_id': request.memberUserId,
+        'title_id': titleId,
+        'assigned_by': leaderId,
+        'is_active': true,
+        'sort_order': 0,
+      };
+
+      await _supabase
+          .from('community_member_titles')
+          .insert(assignmentData);
+
+      // 4. Update request status
+      await _supabase
+          .from('title_requests')
+          .update({
+            'status': 'approved',
+            'reviewed_by': leaderId,
+            'reviewed_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', requestId);
+
+      print('✅ Title request approved and title assigned');
+      return true;
+    } catch (e) {
+      print('❌ ERROR approveTitleRequest: $e');
+      return false;
+    }
+  }
+
+  /// Reject a title request
+  /// 
+  /// Updates the request status to 'rejected'
+  Future<bool> rejectTitleRequest({
+    required String requestId,
+    required String leaderId,
+  }) async {
+    try {
+      await _supabase
+          .from('title_requests')
+          .update({
+            'status': 'rejected',
+            'reviewed_by': leaderId,
+            'reviewed_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', requestId);
+
+      print('✅ Title request rejected');
+      return true;
+    } catch (e) {
+      print('❌ ERROR rejectTitleRequest: $e');
+      return false;
+    }
+  }
+
+  /// Delete a pending title request
+  /// 
+  /// Only the requesting member can delete their own pending requests
+  Future<bool> deleteTitleRequest({
+    required String requestId,
+  }) async {
+    try {
+      await _supabase
+          .from('title_requests')
+          .delete()
+          .eq('id', requestId);
+
+      print('✅ Title request deleted');
+      return true;
+    } catch (e) {
+      print('❌ ERROR deleteTitleRequest: $e');
+      return false;
+    }
+  }
+
+  /// Generate a slug from title text
+  String _generateSlug(String text) {
+    return text
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^\w\s-]'), '')
+        .replaceAll(RegExp(r'[\s_-]+'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+  }
 }
+

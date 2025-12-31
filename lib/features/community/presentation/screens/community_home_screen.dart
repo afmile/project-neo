@@ -187,21 +187,6 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
         onPressed: () => Navigator.of(context).pop(),
       ),
       actions: [
-        // Notification bell
-        NotificationBellWidget(
-          communityId: widget.community.id,
-          iconColor: Colors.white,
-        ),
-        // Neo Studio button for owners
-        if (_isOwner())
-          IconButton(
-            icon: Icon(
-              Icons.settings,
-              color: _parseColor(widget.community.theme.primaryColor),
-            ),
-            tooltip: 'Neo Studio',
-            onPressed: _navigateToStudio,
-          ),
         // Search icon - toggles search mode
         IconButton(
           icon: Icon(
@@ -217,53 +202,29 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
             });
           },
         ),
-        IconButton(
-          icon: const Icon(Icons.more_vert, color: Colors.white),
-          onPressed: () {
-            // Menu Options
-            showModalBottomSheet(
-              context: context,
-              backgroundColor: Colors.transparent,
-              builder: (context) => Container(
-                decoration: const BoxDecoration(
-                  color: NeoColors.card,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                ),
-                child: SafeArea(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ListTile(
-                        leading: const Icon(
-                          Icons.notifications_outlined,
-                          color: Colors.white,
-                        ),
-                        title: const Text(
-                          'Configuración',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                        onTap: () {
-                          Navigator.pop(context);
-                          context.pushNamed(
-                            'community-settings',
-                            pathParameters: {'id': widget.community.id},
-                            extra: {
-                              'name': widget.community.title,
-                              'color': _parseColor(
-                                widget.community.theme.primaryColor,
-                              ),
-                            },
-                          );
-                        },
-                      ),
-                      // More options can form here
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
+        // Notification bell
+        NotificationBellWidget(
+          communityId: widget.community.id,
+          iconColor: Colors.white,
         ),
+        // Settings (visible to all leaders, not just owners)
+        if (_isLeader())
+          IconButton(
+            icon: Icon(
+              Icons.settings,
+              color: _parseColor(widget.community.theme.primaryColor),
+            ),
+            tooltip: 'Configuración',
+            onPressed: () {
+              context.pushNamed(
+                'community-management',
+                pathParameters: {'id': widget.community.id},
+                extra: {
+                  'community': widget.community,
+                },
+              );
+            },
+          ),
       ],
       // Animated title - switches between title and search field
       title: AnimatedSwitcher(
@@ -2485,6 +2446,24 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   bool _isOwner() {
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
     return currentUserId != null && currentUserId == widget.community.ownerId;
+  }
+
+  /// Check if current user is a leader (owner, curator, or mod)
+  bool _isLeader() {
+    // Owner is always a leader
+    if (_isOwner()) return true;
+    
+    // Check role from local identity
+    final localIdentity = ref.read(myLocalIdentityProvider(widget.community.id));
+    return localIdentity.when(
+      data: (identity) {
+        if (identity == null) return false;
+        final role = identity.role?.toLowerCase() ?? '';
+        return role == 'leader' || role == 'curator' || role == 'mod';
+      },
+      loading: () => false,
+      error: (_, __) => false,
+    );
   }
 
   /// Navigate to Neo Studio (admin panel)
