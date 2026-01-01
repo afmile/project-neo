@@ -13,6 +13,7 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/user_profile_provider.dart';
 import '../providers/wall_posts_paginated_provider.dart';
 import '../providers/community_providers.dart';
+import '../providers/friendship_provider.dart';
 import '../widgets/profile_header_section.dart';
 import '../widgets/profile_stats_row.dart';
 import '../widgets/profile_bio_card.dart';
@@ -232,6 +233,7 @@ class _CommunityUserProfileScreenState
                 // TODO: Navigate to chat
               },
               onEditTap: () => _navigateToEditProfile(),
+              onRequestFriendshipConfirmed: () => _handleSendFriendshipRequest(),
             ),
           ),
         ],
@@ -421,6 +423,77 @@ class _CommunityUserProfileScreenState
         ],
       ),
     );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FRIENDSHIP ACTIONS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Handle sending friendship request (S5.2)
+  Future<void> _handleSendFriendshipRequest() async {
+    // Validate required data
+    if (widget.userId.isEmpty || widget.communityId.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error: Datos de usuario incompletos'),
+            backgroundColor: NeoColors.error,
+          ),
+        );
+      }
+      return;
+    }
+
+    try {
+      // Get repository
+      final repo = ref.read(friendshipRepositoryProvider);
+
+      // Send request
+      final result = await repo.sendRequest(widget.communityId, widget.userId);
+
+      if (result != null) {
+        // Success: Invalidate providers to refresh UI state
+        ref.invalidate(friendshipStatusProvider(FriendshipCheckParams(
+          communityId: widget.communityId,
+          otherUserId: widget.userId,
+        )));
+        ref.invalidate(pendingFriendshipRequestsProvider(widget.communityId));
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('🤝 Solicitud de amistad enviada'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        // Error from repository (could be duplicate, constraint violation, etc.)
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No se pudo enviar la solicitud. Puede que ya exista una solicitud pendiente.'),
+              backgroundColor: NeoColors.error,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      // Unexpected error
+      debugPrint('❌ Error sending friendship request: $e');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al enviar solicitud: ${e.toString()}'),
+            backgroundColor: NeoColors.error,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

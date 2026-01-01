@@ -18,6 +18,7 @@ class ProfileActionButtons extends ConsumerWidget {
   final VoidCallback? onMessageTap;
   final VoidCallback? onEditTap;
   final VoidCallback? onShareTap;
+  final VoidCallback? onRequestFriendshipConfirmed;
   final bool isFollowing;
 
   const ProfileActionButtons({
@@ -29,6 +30,7 @@ class ProfileActionButtons extends ConsumerWidget {
     this.onMessageTap,
     this.onEditTap,
     this.onShareTap,
+    this.onRequestFriendshipConfirmed,
     this.isFollowing = false,
   });
 
@@ -101,7 +103,7 @@ class ProfileActionButtons extends ConsumerWidget {
     );
   }
 
-  Widget _buildDefaultOtherButtons() {
+  Widget _buildDefaultOtherButtons({bool showFriendshipButton = false}) {
     return Row(
       children: [
         // Follow button
@@ -124,6 +126,22 @@ class ProfileActionButtons extends ConsumerWidget {
               ),
             ),
           ),
+        
+        // Friendship button (🤝) - shown when mutual follow
+        if (showFriendshipButton && isFollowing && onRequestFriendshipConfirmed != null) ...[
+          const SizedBox(width: 8),
+          Builder(
+            builder: (btnContext) => IconButton.filled(
+              onPressed: () => _showFriendshipDialog(btnContext),
+              icon: const Text('🤝', style: TextStyle(fontSize: 18)),
+              tooltip: 'Pedir Amistad',
+              style: IconButton.styleFrom(
+                backgroundColor: const Color(0xFFEC4899), // Pink
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ),
+        ],
         
         const SizedBox(width: 12),
         
@@ -282,72 +300,13 @@ class ProfileActionButtons extends ConsumerWidget {
       );
     }
 
-    // Can send friendship request
+    // Can send friendship request - show "Siguiendo" + 🤝 button
     if (status.canSendRequest) {
-      return Row(
-        children: [
-          // Create friendship button
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () => _handleSendFriendRequest(context, ref),
-              icon: const Icon(Icons.favorite_outline, size: 18),
-              label: const Text('Crear Amistad'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFEC4899), // Pink
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ),
-          
-          const SizedBox(width: 12),
-          
-          if (onMessageTap != null)
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: onMessageTap,
-                icon: const Icon(Icons.message, size: 18),
-                label: const Text('Mensaje'),
-              ),
-            ),
-        ],
-      );
+      return _buildDefaultOtherButtons(showFriendshipButton: true);
     }
 
     // Fallback: default buttons
     return _buildDefaultOtherButtons();
-  }
-
-  Future<void> _handleSendFriendRequest(BuildContext context, WidgetRef ref) async {
-    if (otherUserId == null || communityId == null) return;
-
-    final repo = ref.read(friendshipRepositoryProvider);
-    final result = await repo.sendRequest(communityId!, otherUserId!);
-
-    if (result != null) {
-      // Invalidate to refresh
-      ref.invalidate(friendshipStatusProvider(FriendshipCheckParams(
-        communityId: communityId!,
-        otherUserId: otherUserId!,
-      )));
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Solicitud de amistad enviada'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } else {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Error al enviar solicitud'),
-            backgroundColor: NeoColors.error,
-          ),
-        );
-      }
-    }
   }
 
   Future<void> _handleAcceptRequest(
@@ -406,5 +365,54 @@ class ProfileActionButtons extends ConsumerWidget {
         );
       }
     }
+  }
+
+  /// Show confirmation dialog for friendship request
+  void _showFriendshipDialog(BuildContext? context, {String? username}) {
+    // Use the context from the widget tree if not provided
+    final dialogContext = context;
+    if (dialogContext == null) return;
+
+    showDialog(
+      context: dialogContext,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Text('🤝', style: TextStyle(fontSize: 24)),
+              SizedBox(width: 12),
+              Text('Pedir Amistad'),
+            ],
+          ),
+          content: Text(
+            username != null 
+                ? '¿Pedir amistad a @$username?'
+                : '¿Pedir amistad a este usuario?',
+            style: const TextStyle(fontSize: 16),
+          ),
+          actions: [
+            // No button
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('No'),
+            ),
+            // Yes button
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                // Call the callback - actual DB logic will be in S5.2
+                onRequestFriendshipConfirmed?.call();
+                // TODO: Add debug print for manual testing
+                debugPrint('[S5.1] Friendship request confirmed - callback invoked');
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFEC4899), // Pink
+              ),
+              child: const Text('Sí'),
+            ),
+          ],
+        );
+      },
+    );
   }
 }
