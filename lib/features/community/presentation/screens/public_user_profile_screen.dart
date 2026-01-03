@@ -230,6 +230,10 @@ class _PublicUserProfileScreenState
 
   /// Loads profile header data: staff role, titles, follower/following counts
   Future<void> _loadHeaderData() async {
+    debugPrint('🔍 DEBUG: Iniciando carga de header data');
+    debugPrint('   User ID: ${widget.userId}');
+    debugPrint('   Community ID: ${widget.communityId}');
+
     try {
       final response = await Supabase.instance.client.rpc(
         'get_profile_header_data',
@@ -239,10 +243,12 @@ class _PublicUserProfileScreenState
         },
       );
 
+      debugPrint('✅ DEBUG: Response recibida: $response');
+
       if (response != null && mounted) {
         setState(() {
           _staffRole = response['staff_role'] as String?;
-          
+
           // Parse titles
           final titlesJson = response['titles'] as List?;
           if (titlesJson != null) {
@@ -250,13 +256,19 @@ class _PublicUserProfileScreenState
                 .map((t) => CommunityTitle.fromJson(t as Map<String, dynamic>))
                 .toList();
           }
-          
+
           _followersCount = response['followers_count'] as int? ?? 0;
           _followingCount = response['following_count'] as int? ?? 0;
+
+          debugPrint('📊 DEBUG: Staff role = $_staffRole');
+          debugPrint('📊 DEBUG: Titles = ${_titles.length}');
+          debugPrint('📊 DEBUG: Followers = $_followersCount, Following = $_followingCount');
         });
+      } else {
+        debugPrint('⚠️ DEBUG: Response es null o widget no montado');
       }
     } catch (e) {
-      debugPrint('Error loading header data: $e');
+      debugPrint('❌ DEBUG ERROR loading header data: $e');
       // Non-critical error, don't update loading state
     }
   }
@@ -450,27 +462,26 @@ class _PublicUserProfileScreenState
   }
 
   Widget _buildHeader(UserEntity user, bool isOwnProfile) {
+    // DEBUG: Log header data
+    debugPrint('🎨 RENDERING Header:');
+    debugPrint('   User: ${user.username}');
+    debugPrint('   Is self: $isOwnProfile');
+    debugPrint('   Staff role: $_staffRole');
+    debugPrint('   Titles count: ${_titles.length}');
+    debugPrint('   Followers: $_followersCount, Following: $_followingCount');
+
     return SliverToBoxAdapter(
-      child: Container(
-        padding: EdgeInsets.only(
-          top: MediaQuery.of(context).padding.top + 8, // SafeArea padding
-          left: NeoSpacing.md,
-          right: NeoSpacing.md,
-          bottom: NeoSpacing.md,
-        ),
-        decoration: BoxDecoration(
-          color: Colors.grey[900],
-          border: Border(
-            bottom: BorderSide(
-              color: Colors.white.withValues(alpha: 0.1),
-              width: 1,
+      child: Column(
+        children: [
+          // Top bar: Back Button + NeoCoins (SafeArea)
+          Container(
+            padding: EdgeInsets.only(
+              top: MediaQuery.of(context).padding.top + 8,
+              left: 8,
+              right: 8,
             ),
-          ),
-        ),
-        child: Column(
-          children: [
-            // Top bar: Back Button + NeoCoins
-            Row(
+            color: Colors.black,
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 // Left Side: Back Button
@@ -479,186 +490,74 @@ class _PublicUserProfileScreenState
                   onPressed: () => Navigator.of(context).pop(),
                 ),
 
-                // Right Side: NeoCoins widget + Menu for self
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: const Color(0xFFFFD700).withValues(alpha: 0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text(
-                            '🪙',
-                            style: TextStyle(fontSize: 16),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${user.neocoinsBalance.toInt()}', 
-                            style: const TextStyle(
-                              color: Color(0xFFFFD700),
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Show menu for self-profile
-                    if (isOwnProfile) ...[
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: const Icon(Icons.more_vert, color: Colors.white),
-                        onPressed: () => _showProfileMenu(context),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-            
-            const SizedBox(height: 12),
-            
-            // Avatar (compacted)
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: NeoColors.accent.withValues(alpha: 0.2),
-                border: Border.all(
-                  color: NeoColors.accent,
-                  width: 3,
-                ),
-              ),
-              child: ClipOval(
-                child: user.avatarUrl != null && user.avatarUrl!.isNotEmpty
-                    ? Image.network(
-                        user.avatarUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const Icon(
-                          Icons.person,
-                          color: NeoColors.accent,
-                          size: 40,
-                        ),
-                      )
-                    : const Icon(
-                        Icons.person,
-                        color: NeoColors.accent,
-                        size: 40,
-                      ),
-              ),
-            ),
-            
-            const SizedBox(height: 8),
-            
-            // Username + Level badge
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  user.username,
-                  style: NeoTextStyles.headlineMedium.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(width: 8),
+                // Right Side: NeoCoins widget
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
+                    horizontal: 12,
+                    vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF8B5CF6), Color(0xFFEC4899)],
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: const Color(0xFFFFD700).withValues(alpha: 0.3),
+                      width: 1,
                     ),
-                    borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text(
-                    'Nv ${user.clearanceLevel}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        '🪙',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${user.neocoinsBalance.toInt()}',
+                        style: const TextStyle(
+                          color: Color(0xFFFFD700),
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-            
-            const SizedBox(height: 8),
-            
-            // Title Tags (Placeholder or Real if implemented)
-            // For now just Role Badge reused as Tag style if needed, or keeping simple
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 3,
-              ),
-              decoration: BoxDecoration(
-                color: _getRoleColor(_communityRole).withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: _getRoleColor(_communityRole),
-                  width: 1,
-                ),
-              ),
-              child: Text(
-                _getRoleDisplayName(_communityRole).toUpperCase(),
-                style: TextStyle(
-                  color: _getRoleColor(_communityRole),
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ),
-            
-            const SizedBox(height: 12),
+          ),
 
-            // Bio
-            if (user.bio != null && user.bio!.isNotEmpty) ...[
-                Text(
-                    user.bio!,
-                    textAlign: TextAlign.center,
-                    style: NeoTextStyles.bodyMedium.copyWith(
-                        color: NeoColors.textSecondary,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 12),
-            ],
-            
-            // Stats
-            _buildStats(),
-            
-            // Action Buttons
-            const SizedBox(height: 12),
-            ProfileActionButtons(
-              isOwnProfile: isOwnProfile,
-              otherUserId: widget.userId,
-              communityId: widget.communityId,
-              isFollowing: _isFollowing,
-              onFollowTap: _handleFollow,
-              onMessageTap: _handleMessage,
-              onRequestFriendshipConfirmed: _handleRequestFriendship,
-              onUnfriendConfirmed: _handleRemoveFriendship,
+          // ProfileHeaderWidget - The new unified header
+          ProfileHeaderWidget(
+            profileUser: user,
+            isSelfProfile: isOwnProfile,
+            followersCount: _followersCount,
+            followingCount: _followingCount,
+            staffRole: _staffRole,
+            titles: _titles,
+            onFollowTap: isOwnProfile ? null : _handleFollow,
+            onMessageTap: isOwnProfile ? null : _handleMessage,
+            onMenuTap: () => _showProfileMenu(context),
+            onFollowersTap: () => _navigateToConnections(initialTab: 0),
+            onFollowingTap: () => _navigateToConnections(initialTab: 1),
+          ),
+
+          // Action Buttons (below header for other profiles)
+          if (!isOwnProfile)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: ProfileActionButtons(
+                isOwnProfile: isOwnProfile,
+                otherUserId: widget.userId,
+                communityId: widget.communityId,
+                isFollowing: _isFollowing,
+                onFollowTap: _handleFollow,
+                onMessageTap: _handleMessage,
+                onRequestFriendshipConfirmed: _handleRequestFriendship,
+                onUnfriendConfirmed: _handleRemoveFriendship,
+              ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
