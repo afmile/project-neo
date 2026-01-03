@@ -19,10 +19,11 @@ import '../widgets/profile_stats_row.dart';
 import '../widgets/profile_bio_card.dart';
 import '../widgets/profile_action_buttons.dart';
 import '../widgets/profile_tabs_widget.dart';
-import '../widgets/thread_post_item.dart';
+import '../widgets/wall_post_card.dart';
 import 'local_edit_profile_screen.dart';
 import 'community_users_list_screen.dart';
 import 'wall_post_thread_screen.dart';
+import '../../domain/entities/wall_post.dart';
 
 class CommunityUserProfileScreen extends ConsumerStatefulWidget {
   final String userId;
@@ -718,17 +719,9 @@ class _CommunityUserProfileScreenState
                     final post = entry.value;
                     final isLast = index == posts.length - 1;
                     
-                    return ThreadPostItem(
-                      authorId: post.authorId,
-                      authorUsername: post.authorName,
-                      authorAvatarUrl: post.authorAvatar,
-                      content: post.content,
-                      createdAt: post.timestamp,
-                      isLast: isLast,
-                      likesCount: post.likes,
-                      commentsCount: post.commentsCount,
-                      isLiked: post.isLikedByCurrentUser,
-                      onTap: () => _openPostThread(post),
+                    return WallPostCard(
+                      post: post,
+                      isProfilePost: true,
                       onLike: () {
                         ref.read(userWallPostsProvider(WallPostsFilter(
                           userId: widget.userId,
@@ -736,6 +729,14 @@ class _CommunityUserProfileScreenState
                         )).notifier).toggleLike(post.id);
                       },
                       onComment: () => _openPostThread(post, autoFocus: true),
+                      onDelete: (post.authorId == ref.read(currentUserProvider)?.id) 
+                          ? () {
+                              ref.read(userWallPostsProvider(WallPostsFilter(
+                                  userId: widget.userId,
+                                  communityId: widget.communityId,
+                              )).notifier).deleteWallPost(post.id);
+                            }
+                          : null,
                     );
                   }).toList(),
                 );

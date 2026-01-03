@@ -15,7 +15,7 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/entities/wall_post.dart';
 import '../../domain/entities/friendship_status.dart';
 import '../../data/models/wall_post_model.dart';
-import '../widgets/thread_post_item.dart';
+import '../widgets/wall_post_card.dart';
 import '../widgets/wall_threads_composer_launcher.dart';
 import '../widgets/wall_threads_composer_sheet.dart';
 import '../widgets/profile_header_widget.dart';
@@ -927,19 +927,51 @@ class _PublicUserProfileScreenState
               final post = entry.value;
               final isLastPost = index == _wallPosts.length - 1;
               
-              return ThreadPostItem(
-                authorId: post.authorId,
-                authorUsername: post.authorName,
-                authorAvatarUrl: post.authorAvatar,
-                content: post.content,
-                createdAt: post.timestamp,
-                isLast: isLastPost,
-                likesCount: post.likes,
-                commentsCount: post.commentsCount,
-                isLiked: post.isLikedByCurrentUser,
-                onTap: () => _openPostThread(post),
+              return WallPostCard(
+                post: post,
+                isProfilePost: true,
                 onLike: () => _togglePostLike(post),
                 onComment: () => _openPostThread(post, autoFocus: true),
+                onDelete: (Supabase.instance.client.auth.currentUser?.id == post.authorId)
+                    ? () async {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Eliminar publicación'),
+                            content: const Text('¿Estás seguro de que quieres eliminar esta publicación?'),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('Cancelar'),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                child: const Text('Eliminar', style: TextStyle(color: Colors.red)),
+                              ),
+                            ],
+                          ),
+                        );
+                        
+                        if (confirm == true) {
+                          try {
+                            await Supabase.instance.client
+                                .from('profile_wall_posts')
+                                .delete()
+                                .eq('id', post.id);
+                            
+                            setState(() {
+                              _wallPosts.removeAt(index);
+                            });
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error al eliminar: $e')),
+                              );
+                            }
+                          }
+                        }
+                      }
+                    : null,
               );
             })),
         ],
