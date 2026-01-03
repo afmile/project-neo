@@ -19,7 +19,7 @@ import '../widgets/profile_stats_row.dart';
 import '../widgets/profile_bio_card.dart';
 import '../widgets/profile_action_buttons.dart';
 import '../widgets/profile_tabs_widget.dart';
-import '../widgets/wall_post_card.dart';
+import '../widgets/wall_post_item.dart';
 import 'local_edit_profile_screen.dart';
 import 'community_users_list_screen.dart';
 import 'wall_post_thread_screen.dart';
@@ -719,22 +719,40 @@ class _CommunityUserProfileScreenState
                     final post = entry.value;
                     final isLast = index == posts.length - 1;
                     
-                    return WallPostCard(
+                    return WallPostItem(
                       post: post,
-                      isProfilePost: true,
                       onLike: () {
                         ref.read(userWallPostsProvider(WallPostsFilter(
                           userId: widget.userId,
                           communityId: widget.communityId,
                         )).notifier).toggleLike(post.id);
                       },
-                      onComment: () => _openPostThread(post, autoFocus: true),
-                      onDelete: (post.authorId == ref.read(currentUserProvider)?.id) 
+                      onReply: () => _openPostThread(post, autoFocus: true),
+                      onMenuTap: (post.authorId == ref.read(currentUserProvider)?.id)
                           ? () {
-                              ref.read(userWallPostsProvider(WallPostsFilter(
-                                  userId: widget.userId,
-                                  communityId: widget.communityId,
-                              )).notifier).deleteWallPost(post.id);
+                              // Show delete option for own posts
+                              showModalBottomSheet(
+                                context: context,
+                                builder: (context) => Container(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      ListTile(
+                                        leading: const Icon(Icons.delete, color: Colors.red),
+                                        title: const Text('Eliminar'),
+                                        onTap: () {
+                                          Navigator.pop(context);
+                                          ref.read(userWallPostsProvider(WallPostsFilter(
+                                            userId: widget.userId,
+                                            communityId: widget.communityId,
+                                          )).notifier).deleteWallPost(post.id);
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
                             }
                           : null,
                     );

@@ -14,7 +14,7 @@ import '../../../../core/theme/neo_theme.dart';
 import '../../domain/entities/wall_post.dart';
 import '../../domain/entities/wall_post_comment.dart';
 import '../../data/models/wall_post_comment_model.dart';
-import '../widgets/wall_post_card.dart';
+import '../widgets/wall_post_item.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../core/widgets/telegram_input_bar.dart';
 import '../../../../core/widgets/report_modal.dart';
@@ -327,17 +327,13 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
                       children: [
                         // No vertical line - using indentation only for cleaner look
                           
-                        WallPostCard(
+                        WallPostItem(
                           post: widget.post.copyWith(
                             isLikedByCurrentUser: _isLiked,
                             likes: _likesCount,
                           ),
-                          isThreadView: true,
                           onLike: _toggleLike,
-                          // Focus input when comment button is tapped in thread view
-                          onComment: () => _commentFocusNode.requestFocus(),
-                          onDelete: () {}, 
-                          canDelete: false, 
+                          onReply: () => _commentFocusNode.requestFocus(),
                         ),
                       ],
                     ),

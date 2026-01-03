@@ -29,7 +29,7 @@ import '../providers/community_members_provider.dart';
 import '../providers/wall_posts_paginated_provider.dart';
 import '../providers/home_vivo_providers.dart'; // NEW
 import '../providers/local_identity_providers.dart'; // Local identity provider
-import '../widgets/wall_post_card.dart';
+import '../widgets/wall_post_item.dart';
 import '../widgets/sala_card.dart'; // NEW
 import '../widgets/post_list_tile.dart'; // NEW
 import '../widgets/identity_card.dart'; // NEW
@@ -1313,9 +1313,8 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
               final post = paginated.posts[index];
               final currentUserId = ref.read(currentUserProvider)?.id;
 
-              return WallPostCard(
+              return WallPostItem(
                 post: post,
-                canDelete: post.authorId == currentUserId,
                 onLike: () {
                   ref
                       .read(
@@ -1325,24 +1324,27 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                       )
                       .toggleLike(post.id);
                 },
-                onDelete: () async {
-                  final deleted = await ref
-                      .read(
-                        wallPostsPaginatedProvider(
-                          widget.community.id,
-                        ).notifier,
-                      )
-                      .deletePost(post.id);
-                  
-                  if (deleted && mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Post eliminado'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  }
-                },
+                onReply: null, // TODO: Implement comment/reply functionality
+                onMenuTap: post.authorId == currentUserId
+                    ? () async {
+                        final deleted = await ref
+                            .read(
+                              wallPostsPaginatedProvider(
+                                widget.community.id,
+                              ).notifier,
+                            )
+                            .deletePost(post.id);
+                        
+                        if (deleted && mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Post eliminado'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        }
+                      }
+                    : null,
               );
             },
           ),

@@ -15,7 +15,7 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/entities/wall_post.dart';
 import '../../domain/entities/friendship_status.dart';
 import '../../data/models/wall_post_model.dart';
-import '../widgets/wall_post_card.dart';
+import '../widgets/wall_post_item.dart';
 import '../widgets/wall_threads_composer_launcher.dart';
 import '../widgets/wall_threads_composer_sheet.dart';
 import '../widgets/profile_header_widget.dart';
@@ -927,12 +927,11 @@ class _PublicUserProfileScreenState
               final post = entry.value;
               final isLastPost = index == _wallPosts.length - 1;
               
-              return WallPostCard(
+              return WallPostItem(
                 post: post,
-                isProfilePost: true,
                 onLike: () => _togglePostLike(post),
-                onComment: () => _openPostThread(post, autoFocus: true),
-                onDelete: (Supabase.instance.client.auth.currentUser?.id == post.authorId)
+                onReply: () => _openPostThread(post, autoFocus: true),
+                onMenuTap: (Supabase.instance.client.auth.currentUser?.id == post.authorId)
                     ? () async {
                         final confirm = await showDialog<bool>(
                           context: context,
