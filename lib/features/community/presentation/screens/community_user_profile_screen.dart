@@ -19,10 +19,10 @@ import '../widgets/profile_stats_row.dart';
 import '../widgets/profile_bio_card.dart';
 import '../widgets/profile_action_buttons.dart';
 import '../widgets/profile_tabs_widget.dart';
-import '../widgets/wall_post_card.dart';
 import '../widgets/thread_post_item.dart';
 import 'local_edit_profile_screen.dart';
 import 'community_users_list_screen.dart';
+import 'wall_post_thread_screen.dart';
 
 class CommunityUserProfileScreen extends ConsumerStatefulWidget {
   final String userId;
@@ -727,12 +727,33 @@ class _CommunityUserProfileScreenState
                       isLast: isLast,
                       likesCount: post.likes,
                       commentsCount: post.commentsCount,
+                      isLiked: post.isLikedByCurrentUser,
+                      onTap: () => _openPostThread(post),
+                      onLike: () {
+                        ref.read(userWallPostsProvider(WallPostsFilter(
+                          userId: widget.userId,
+                          communityId: widget.communityId,
+                        )).notifier).toggleLike(post.id);
+                      },
+                      onComment: () => _openPostThread(post, autoFocus: true),
                     );
                   }).toList(),
                 );
               },
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _openPostThread(WallPost post, {bool autoFocus = false}) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => WallPostThreadScreen(
+          post: post,
+          autoFocusInput: autoFocus,
+          isProfilePost: true,
         ),
       ),
     );

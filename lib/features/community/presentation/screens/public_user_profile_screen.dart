@@ -23,6 +23,7 @@ import '../../domain/models/community_title_model.dart';
 import '../providers/community_follow_provider.dart';
 import '../providers/friendship_provider.dart';
 import '../widgets/profile_action_buttons.dart';
+import 'wall_post_thread_screen.dart';
 
 class PublicUserProfileScreen extends ConsumerStatefulWidget {
   final String userId;
@@ -191,7 +192,7 @@ class _PublicUserProfileScreenState
       try {
         final responses = await Future.wait<dynamic>([
            supabase.from('profile_wall_posts').count().eq('profile_user_id', widget.userId).eq('community_id', widget.communityId),
-           supabase.from('profile_wall_posts').select('*, author:users_global!profile_wall_posts_author_id_fkey(*)').eq('profile_user_id', widget.userId).eq('community_id', widget.communityId).order('created_at', ascending: false).limit(20),
+           supabase.from('profile_wall_posts').select('*, author:users_global!profile_wall_posts_author_id_fkey(*), user_likes:profile_wall_post_likes(user_id)').eq('profile_user_id', widget.userId).eq('community_id', widget.communityId).order('created_at', ascending: false).limit(20),
         ]);
         
         final countResponse = responses[0] as int;
@@ -935,6 +936,10 @@ class _PublicUserProfileScreenState
                 isLast: isLastPost,
                 likesCount: post.likes,
                 commentsCount: post.commentsCount,
+                isLiked: post.isLikedByCurrentUser,
+                onTap: () => _openPostThread(post),
+                onLike: () => _togglePostLike(post),
+                onComment: () => _openPostThread(post, autoFocus: true),
               );
             })),
         ],
@@ -967,6 +972,57 @@ class _PublicUserProfileScreenState
         },
       ),
     );
+  }
+
+  void _openPostThread(WallPost post, {bool autoFocus = false}) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => WallPostThreadScreen(
+          post: post,
+          autoFocusInput: autoFocus,
+          isProfilePost: true,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _togglePostLike(WallPost post) async {
+    final supabase = Supabase.instance.client;
+    final currentUserId = supabase.auth.currentUser?.id;
+    if (currentUserId == null) return;
+
+    final postIndex = _wallPosts.indexWhere((p) => p.id == post.id);
+    if (postIndex == -1) return;
+
+    final wasLiked = post.isLikedByCurrentUser;
+    final updatedPost = post.copyWith(
+      isLikedByCurrentUser: !wasLiked,
+      likes: wasLiked ? post.likes - 1 : post.likes + 1,
+    );
+
+    setState(() {
+      _wallPosts[postIndex] = updatedPost;
+    });
+
+    try {
+      if (wasLiked) {
+        await supabase
+            .from('profile_wall_post_likes')
+            .delete()
+            .eq('post_id', post.id)
+            .eq('user_id', currentUserId);
+      } else {
+        await supabase.from('profile_wall_post_likes').insert({
+          'post_id': post.id,
+          'user_id': currentUserId,
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _wallPosts[postIndex] = post;
+      });
+      debugPrint('Error toggling post like: $e');
+    }
   }
 
   Widget _buildActivityTab() {
