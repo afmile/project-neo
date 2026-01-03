@@ -279,37 +279,58 @@ class _NotificationTileState extends ConsumerState<NotificationTile> {
 
     setState(() => _isProcessing = true);
 
-    final success = await ref
-        .read(notificationActionsProvider(n.communityId).notifier)
-        .resolveAction(
-          notificationId: n.id,
-          accepted: accepted,
-          entityType: n.entityType!,
-          entityId: n.entityId!,
-        );
+    try {
+      final success = await ref
+          .read(notificationActionsProvider(n.communityId).notifier)
+          .resolveAction(
+            notificationId: n.id,
+            accepted: accepted,
+            entityType: n.entityType!,
+            entityId: n.entityId!,
+          );
 
-    if (mounted) {
-      setState(() => _isProcessing = false);
-    }
+      if (!success) {
+        throw Exception('No se pudo completar la acción');
+      }
 
-    if (success && mounted) {
-      // Invalidate friendship status if needed
-      if (n.entityType == 'friendship_request') {
-        final actorId = n.data['requester_id'] as String?;
-        if (actorId != null) {
+      // Note: communityNotificationsProvider and pendingFriendshipRequestsProvider
+      // are already invalidated by the NotificationActionsNotifier
+
+      if (n.isFriendshipRequest) {
+        // Prefer actorId, fallback to data['requester_id']
+        final otherUserId = n.actorId ?? n.data['requester_id'] as String?;
+        
+        if (otherUserId != null) {
           ref.invalidate(friendshipStatusProvider(FriendshipCheckParams(
             communityId: n.communityId,
-            otherUserId: actorId,
+            otherUserId: otherUserId,
           )));
         }
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(accepted ? '¡Solicitud aceptada!' : 'Solicitud rechazada'),
-          backgroundColor: accepted ? Colors.green : NeoColors.textSecondary,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(accepted ? '¡Solicitud aceptada!' : 'Solicitud rechazada'),
+            backgroundColor: accepted ? Colors.green : null,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 }

@@ -17,23 +17,12 @@ class ProfileTabsWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.black,
-        border: Border(
-          bottom: BorderSide(
-            color: NeoColors.border,
-            width: 1,
-          ),
-        ),
-      ),
+      color: Colors.black,
       child: TabBar(
         controller: controller,
-        indicator: const UnderlineTabIndicator(
-          borderSide: BorderSide(
-            color: NeoColors.accent,
-            width: 2,
-          ),
-        ),
+        dividerColor: Colors.transparent, // Remove white separator line
+        indicatorColor: NeoColors.accent,
+        indicatorWeight: 3,
         labelColor: NeoColors.accent,
         unselectedLabelColor: NeoColors.textSecondary,
         labelStyle: NeoTextStyles.labelLarge,

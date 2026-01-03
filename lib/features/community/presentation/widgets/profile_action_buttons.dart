@@ -7,8 +7,11 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../providers/friendship_provider.dart';
+import '../screens/community_users_list_screen.dart';
 
 class ProfileActionButtons extends ConsumerWidget {
   final bool isOwnProfile;
@@ -19,6 +22,7 @@ class ProfileActionButtons extends ConsumerWidget {
   final VoidCallback? onEditTap;
   final VoidCallback? onShareTap;
   final VoidCallback? onRequestFriendshipConfirmed;
+  final VoidCallback? onUnfriendConfirmed;
   final bool isFollowing;
 
   const ProfileActionButtons({
@@ -31,6 +35,7 @@ class ProfileActionButtons extends ConsumerWidget {
     this.onEditTap,
     this.onShareTap,
     this.onRequestFriendshipConfirmed,
+    this.onUnfriendConfirmed,
     this.isFollowing = false,
   });
 
@@ -71,23 +76,33 @@ class ProfileActionButtons extends ConsumerWidget {
   }
 
   Widget _buildOtherProfileButtons(BuildContext context, WidgetRef ref) {
-    // If we have userId and communityId, check friendship status
     if (otherUserId != null && communityId != null) {
+      // Check if we have friendship status to show friendship-aware buttons
       final friendshipAsync = ref.watch(friendshipStatusProvider(
         FriendshipCheckParams(
           communityId: communityId!,
           otherUserId: otherUserId!,
         ),
       ));
-
+      
       return friendshipAsync.when(
         loading: () => _buildLoadingState(),
-        error: (_, __) => _buildDefaultOtherButtons(),
-        data: (status) => _buildFriendshipAwareButtons(context, ref, status),
+        error: (_, __) => _buildSimpleFollowButtons(),
+        data: (status) {
+          if (status.areFriends) {
+            return _buildFriendsBadge(context);
+          }
+          
+          if (status.haveMutualFollow) {
+            return _buildMutualFollowWithFriendshipButton(status);
+          }
+          
+          return _buildSimpleFollowButtons();
+        },
       );
     }
 
-    return _buildDefaultOtherButtons();
+    return _buildSimpleFollowButtons();
   }
 
   Widget _buildLoadingState() {
@@ -103,16 +118,16 @@ class ProfileActionButtons extends ConsumerWidget {
     );
   }
 
-  Widget _buildDefaultOtherButtons({bool showFriendshipButton = false}) {
+  Widget _buildSimpleFollowButtons() {
     return Row(
       children: [
-        // Follow button
+        // Follow/Siguiendo button
         if (onFollowTap != null)
           Expanded(
             child: ElevatedButton.icon(
               onPressed: onFollowTap,
               icon: Icon(
-                isFollowing ? Icons.person_remove : Icons.person_add,
+                isFollowing ? Icons.check : Icons.person_add,
                 size: 18,
               ),
               label: Text(isFollowing ? 'Siguiendo' : 'Seguir'),
@@ -120,28 +135,144 @@ class ProfileActionButtons extends ConsumerWidget {
                 backgroundColor: isFollowing 
                     ? NeoColors.card 
                     : NeoColors.accent,
-                foregroundColor: isFollowing 
-                    ? NeoColors.textPrimary 
-                    : Colors.white,
-              ),
-            ),
-          ),
-        
-        // Friendship button (🤝) - shown when mutual follow
-        if (showFriendshipButton && isFollowing && onRequestFriendshipConfirmed != null) ...[
-          const SizedBox(width: 8),
-          Builder(
-            builder: (btnContext) => IconButton.filled(
-              onPressed: () => _showFriendshipDialog(btnContext),
-              icon: const Text('🤝', style: TextStyle(fontSize: 18)),
-              tooltip: 'Pedir Amistad',
-              style: IconButton.styleFrom(
-                backgroundColor: const Color(0xFFEC4899), // Pink
                 foregroundColor: Colors.white,
               ),
             ),
           ),
-        ],
+        
+        if (onFollowTap != null && onMessageTap != null)
+          const SizedBox(width: 12),
+        
+        // Message button
+        if (onMessageTap != null)
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: onMessageTap,
+              icon: const Icon(Icons.message, size: 18),
+              label: const Text('Mensaje'),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildMutualFollowWithFriendshipButton(FriendshipStatusInfo status) {
+    // Mutual follow + friendship request option
+    return Row(
+      children: [
+        // Follow/Siguiendo button
+        if (onFollowTap != null)
+          Expanded(
+            flex: 2,
+            child: ElevatedButton.icon(
+              onPressed: onFollowTap,
+              icon: Icon(
+                isFollowing ? Icons.check : Icons.person_add,
+                size: 18,
+              ),
+              label: Text(isFollowing ? 'Siguiendo' : 'Seguir'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isFollowing 
+                    ? NeoColors.card 
+                    : NeoColors.accent,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ),
+        
+        if (onFollowTap != null && onRequestFriendshipConfirmed != null)
+          const SizedBox(width: 8),
+        
+        // Friendship button (🤝) - check status
+        if (isFollowing && onRequestFriendshipConfirmed != null)
+           if (status.canSendRequest)
+            Builder(
+              builder: (btnContext) => IconButton.filled(
+                onPressed: () => _showFriendshipDialog(btnContext),
+                icon: const Text('🤝', style: TextStyle(fontSize: 18)),
+                tooltip: 'Pedir Amistad',
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFFEC4899),
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            )
+          else if (status.pendingRequest != null)
+             // Pending indicator
+             Container(
+               height: 40,
+               width: 40,
+               decoration: BoxDecoration(
+                 color: NeoColors.card,
+                 borderRadius: BorderRadius.circular(20),
+                 border: Border.all(color: NeoColors.border),
+               ),
+               child: const Center(
+                 child: Icon(Icons.hourglass_empty, size: 18, color: NeoColors.textSecondary),
+               ),
+             ),
+        
+        if (onMessageTap != null)
+          const SizedBox(width: 8),
+        
+        // Message button
+        if (onMessageTap != null)
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: onMessageTap,
+              icon: const Icon(Icons.message, size: 18),
+              label: const Text('Mensaje'),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildFriendsBadge(BuildContext context) {
+    // Friends - show badge instead of follow button
+    return Row(
+      children: [
+        // Friends badge
+        Expanded(
+          child: InkWell(
+            onTap: () {
+               final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+               if (currentUserId != null && communityId != null) {
+                 context.pushNamed(
+                   'community-users-list',
+                   pathParameters: {'communityId': communityId!},
+                   extra: {
+                     'userId': currentUserId, // Show MY friends list
+                     'type': UserListType.friends,
+                   },
+                 );
+               }
+            },
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.withValues(alpha: 0.5)),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.favorite, size: 18, color: Colors.green),
+                  SizedBox(width: 8),
+                  Text(
+                    'Amig@s',
+                    style: TextStyle(
+                      color: Colors.green,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
         
         const SizedBox(width: 12),
         
@@ -158,213 +289,34 @@ class ProfileActionButtons extends ConsumerWidget {
     );
   }
 
-  Widget _buildFriendshipAwareButtons(
-    BuildContext context,
-    WidgetRef ref,
-    FriendshipStatusInfo status,
-  ) {
-    // Case 3: Already friends
-    if (status.areFriends) {
-      return Row(
-        children: [
-          // Friends badge
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green.withValues(alpha: 0.5)),
-              ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.favorite, size: 18, color: Colors.green),
-                  SizedBox(width: 8),
-                  Text(
-                    'Amigos',
-                    style: TextStyle(
-                      color: Colors.green,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+  void _showUnfriendDialog(BuildContext context) {
+    if (onUnfriendConfirmed == null) return;
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text('Anular amistad', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          '¿Deseas anular la amistad? Ambos usuarios volverán a estado "Siguiendo".',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar', style: TextStyle(color: Colors.white)),
           ),
-          
-          const SizedBox(width: 12),
-          
-          // Message button
-          if (onMessageTap != null)
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: onMessageTap,
-                icon: const Icon(Icons.message, size: 18),
-                label: const Text('Mensaje'),
-              ),
-            ),
-        ],
-      );
-    }
-
-    // Case 2: Mutual follow - show friendship options
-    if (status.haveMutualFollow) {
-      return _buildMutualFollowButtons(context, ref, status);
-    }
-
-    // Case 1: No mutual follow - default buttons
-    return _buildDefaultOtherButtons();
-  }
-
-  Widget _buildMutualFollowButtons(
-    BuildContext context,
-    WidgetRef ref,
-    FriendshipStatusInfo status,
-  ) {
-    // I sent a pending request
-    if (status.iSentRequest) {
-      return Row(
-        children: [
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: NeoColors.card,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: NeoColors.border),
-              ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.schedule, size: 18, color: NeoColors.textSecondary),
-                  SizedBox(width: 8),
-                  Text(
-                    'Solicitud enviada',
-                    style: TextStyle(
-                      color: NeoColors.textSecondary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          
-          const SizedBox(width: 12),
-          
-          if (onMessageTap != null)
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: onMessageTap,
-                icon: const Icon(Icons.message, size: 18),
-                label: const Text('Mensaje'),
-              ),
-            ),
-        ],
-      );
-    }
-
-    // I received a pending request - show accept/reject
-    if (status.iReceivedRequest) {
-      return Row(
-        children: [
-          // Accept button
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () => _handleAcceptRequest(context, ref, status),
-              icon: const Icon(Icons.check, size: 18),
-              label: const Text('Aceptar'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ),
-          
-          const SizedBox(width: 8),
-          
-          // Reject button
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () => _handleRejectRequest(context, ref, status),
-              icon: const Icon(Icons.close, size: 18),
-              label: const Text('Rechazar'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: NeoColors.error,
-                side: const BorderSide(color: NeoColors.error),
-              ),
-            ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              onUnfriendConfirmed?.call();
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            child: const Text('Anular'),
           ),
         ],
-      );
-    }
-
-    // Can send friendship request - show "Siguiendo" + 🤝 button
-    if (status.canSendRequest) {
-      return _buildDefaultOtherButtons(showFriendshipButton: true);
-    }
-
-    // Fallback: default buttons
-    return _buildDefaultOtherButtons();
-  }
-
-  Future<void> _handleAcceptRequest(
-    BuildContext context,
-    WidgetRef ref,
-    FriendshipStatusInfo status,
-  ) async {
-    if (status.pendingRequest == null) return;
-
-    final repo = ref.read(friendshipRepositoryProvider);
-    final success = await repo.acceptRequest(status.pendingRequest!.id);
-
-    if (success) {
-      // Invalidate to refresh
-      ref.invalidate(friendshipStatusProvider(FriendshipCheckParams(
-        communityId: communityId!,
-        otherUserId: otherUserId!,
-      )));
-      ref.invalidate(pendingFriendshipRequestsProvider(communityId!));
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('¡Ahora son amigos!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _handleRejectRequest(
-    BuildContext context,
-    WidgetRef ref,
-    FriendshipStatusInfo status,
-  ) async {
-    if (status.pendingRequest == null) return;
-
-    final repo = ref.read(friendshipRepositoryProvider);
-    final success = await repo.rejectRequest(status.pendingRequest!.id);
-
-    if (success) {
-      // Invalidate to refresh
-      ref.invalidate(friendshipStatusProvider(FriendshipCheckParams(
-        communityId: communityId!,
-        otherUserId: otherUserId!,
-      )));
-      ref.invalidate(pendingFriendshipRequestsProvider(communityId!));
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Solicitud rechazada'),
-            backgroundColor: NeoColors.textSecondary,
-          ),
-        );
-      }
-    }
+      ),
+    );
   }
 
   /// Show confirmation dialog for friendship request
@@ -400,9 +352,8 @@ class ProfileActionButtons extends ConsumerWidget {
             FilledButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop();
-                // Call the callback - actual DB logic will be in S5.2
+                // Call the callback
                 onRequestFriendshipConfirmed?.call();
-                // TODO: Add debug print for manual testing
                 debugPrint('[S5.1] Friendship request confirmed - callback invoked');
               },
               style: FilledButton.styleFrom(

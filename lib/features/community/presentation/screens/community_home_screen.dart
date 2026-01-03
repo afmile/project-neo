@@ -18,6 +18,7 @@ import '../../../chat/presentation/screens/community_chats_screen.dart';
 import '../../../chat/presentation/widgets/chat_catalog_grid.dart';
 import '../../../chat/presentation/screens/create_chat_screen.dart';
 import 'community_user_profile_screen.dart';
+import 'public_user_profile_screen.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import 'community_members_screen.dart';
 import 'create_content_screen.dart';
@@ -97,7 +98,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
       body: Stack(
         children: [
           _buildBody(),
-          // Beta Feedback FAB - positioned at bottom-right
+          // Beta Feedback FAB - positioned at bottom-right (always visible)
           if (isMember && !keyboardVisible)
             Positioned(
               right: 16,
@@ -1954,8 +1955,8 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
     final currentUser = ref.watch(currentUserProvider);
     final userId = currentUser?.id ?? 'current_user_id'; // Fallback for demo
 
-    // Render the actual CommunityUserProfileScreen
-    return CommunityUserProfileScreen(
+    // Use PublicUserProfileScreen for consistent layout with other-profile view
+    return PublicUserProfileScreen(
       userId: userId,
       communityId: widget.community.id,
     );

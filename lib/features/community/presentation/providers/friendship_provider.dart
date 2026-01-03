@@ -21,7 +21,7 @@ final friendshipRepositoryProvider = Provider<FriendshipRepository>((ref) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /// Get pending friendship requests for current user in a community
-final pendingFriendshipRequestsProvider = FutureProvider.family<List<FriendshipRequest>, String>(
+final pendingFriendshipRequestsProvider = FutureProvider.autoDispose.family<List<FriendshipRequest>, String>(
   (ref, communityId) async {
     final repo = ref.read(friendshipRepositoryProvider);
     return repo.getPendingRequests(communityId);
@@ -54,7 +54,7 @@ class FriendshipCheckParams {
 }
 
 /// Check friendship status with another user
-final friendshipStatusProvider = FutureProvider.family<FriendshipStatusInfo, FriendshipCheckParams>(
+final friendshipStatusProvider = FutureProvider.autoDispose.family<FriendshipStatusInfo, FriendshipCheckParams>(
   (ref, params) async {
     final repo = ref.read(friendshipRepositoryProvider);
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
@@ -67,6 +67,9 @@ final friendshipStatusProvider = FutureProvider.family<FriendshipStatusInfo, Fri
         pendingRequest: null,
       );
     }
+    
+    // Subscribe to realtime changes for this specific relationship (Optional but good for UX)
+    // For now, autoDispose ensures we fetch fresh data every time we enter the screen.
 
     // Check if already friends
     final areFriends = await repo.areFriends(

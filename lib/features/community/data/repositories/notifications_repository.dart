@@ -5,11 +5,13 @@ library;
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/entities/community_notification.dart';
+import './friendship_repository.dart';
 
 class NotificationsRepository {
   final SupabaseClient _supabase;
+  final FriendshipRepository _friendshipRepository;
 
-  NotificationsRepository(this._supabase);
+  NotificationsRepository(this._supabase, this._friendshipRepository);
 
   String? get _currentUserId => _supabase.auth.currentUser?.id;
 
@@ -94,7 +96,7 @@ class NotificationsRepository {
   }
 
   /// Resolve an actionable notification (accept/reject)
-  /// This updates both the notification AND the related entity
+  /// This updates both the notification AND delegates to appropriate repository
   Future<bool> resolveAction({
     required String notificationId,
     required bool accepted,
@@ -104,7 +106,25 @@ class NotificationsRepository {
     try {
       final status = accepted ? 'accepted' : 'rejected';
 
-      // 1. Update the notification
+      // 1. Update the related entity first (delegate to appropriate repository)
+      bool entityUpdateSuccess = false;
+      
+      if (entityType == 'friendship_request') {
+        // Delegate to FriendshipRepository - single source of truth
+        if (accepted) {
+          entityUpdateSuccess = await _friendshipRepository.acceptRequest(entityId);
+        } else {
+          entityUpdateSuccess = await _friendshipRepository.rejectRequest(entityId);
+        }
+        
+        // If friendship action failed, don't update notification
+        if (!entityUpdateSuccess) {
+          print('❌ Failed to $status friendship request $entityId');
+          return false;
+        }
+      }
+
+      // 2. Update the notification only if entity update succeeded
       await _supabase
           .from('community_notifications')
           .update({
@@ -113,17 +133,6 @@ class NotificationsRepository {
           })
           .eq('id', notificationId)
           .eq('recipient_id', _currentUserId!);
-
-      // 2. Update the related entity (e.g., friendship_requests)
-      if (entityType == 'friendship_request') {
-        await _supabase
-            .from('friendship_requests')
-            .update({
-              'status': status,
-              'responded_at': DateTime.now().toIso8601String(),
-            })
-            .eq('id', entityId);
-      }
 
       return true;
     } catch (e) {

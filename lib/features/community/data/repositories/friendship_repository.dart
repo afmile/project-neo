@@ -66,6 +66,35 @@ class FriendshipRepository {
     }
   }
 
+  /// Get ONLY IDs of friends for a user in a community (Optimized for badges)
+  Future<Set<String>> getFriendIds(String communityId, String userId) async {
+    try {
+      final response = await _supabase
+          .from('friendship_requests')
+          .select('requester_id, recipient_id')
+          .eq('community_id', communityId)
+          .eq('status', 'accepted')
+          .or('requester_id.eq.$userId,recipient_id.eq.$userId');
+
+      final ids = <String>{};
+      for (final item in response as List) {
+        final reqId = item['requester_id'] as String;
+        final recId = item['recipient_id'] as String;
+        
+        // Add the OTHER ID to the set
+        if (reqId == userId) {
+          ids.add(recId);
+        } else {
+          ids.add(reqId);
+        }
+      }
+      return ids;
+    } catch (e) {
+      print('❌ ERROR getFriendIds: $e');
+      return {};
+    }
+  }
+
   /// Check if a friendship request exists between two users
   Future<FriendshipRequest?> getExistingRequest(
     String communityId,
@@ -140,6 +169,12 @@ class FriendshipRepository {
 
       return _fromJson(response);
     } catch (e) {
+      // Handle duplicate request (race condition or retrying rejected)
+      if (e.toString().contains('23505') || e.toString().contains('friendship_requests_unique')) {
+        print('⚠️ Friendship request already exists, fetching existing...');
+        return getExistingRequest(communityId, _currentUserId!, recipientId);
+      }
+
       print('❌ ERROR sendRequest: $e');
       return null;
     }
@@ -225,6 +260,24 @@ class FriendshipRepository {
       recipientAvatar: recipientData?['avatar_global_url'] as String?,
     );
   }
+  /// Remove friendship (delete request)
+  Future<bool> removeFriendship(String communityId, String otherUserId) async {
+    try {
+      if (_currentUserId == null) return false;
+
+      await _supabase
+          .from('friendship_requests')
+          .delete()
+          .eq('community_id', communityId)
+          .or('and(requester_id.eq.$_currentUserId,recipient_id.eq.$otherUserId),and(requester_id.eq.$otherUserId,recipient_id.eq.$_currentUserId)');
+      
+      return true;
+    } catch (e) {
+      print('❌ ERROR removeFriendship: $e');
+      return false;
+    }
+  }
+
 
   FriendshipStatus _parseStatus(String status) {
     switch (status) {

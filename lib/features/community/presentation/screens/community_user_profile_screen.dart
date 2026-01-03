@@ -11,16 +11,18 @@ import '../../../../shared/widgets/destructive_action_dialog.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/user_profile_provider.dart';
-import '../providers/wall_posts_paginated_provider.dart';
 import '../providers/community_providers.dart';
 import '../providers/friendship_provider.dart';
+import '../providers/community_follow_provider.dart';
 import '../widgets/profile_header_section.dart';
 import '../widgets/profile_stats_row.dart';
 import '../widgets/profile_bio_card.dart';
 import '../widgets/profile_action_buttons.dart';
 import '../widgets/profile_tabs_widget.dart';
 import '../widgets/wall_post_card.dart';
+import '../widgets/thread_post_item.dart';
 import 'local_edit_profile_screen.dart';
+import 'community_users_list_screen.dart';
 
 class CommunityUserProfileScreen extends ConsumerStatefulWidget {
   final String userId;
@@ -41,9 +43,7 @@ class _CommunityUserProfileScreenState
     extends ConsumerState<CommunityUserProfileScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final TextEditingController _wallInputController = TextEditingController();
-  bool _isPostingToWall = false;
-  bool _isFollowing = false; // TODO: Connect to real follow state
+
 
   @override
   void initState() {
@@ -54,7 +54,6 @@ class _CommunityUserProfileScreenState
   @override
   void dispose() {
     _tabController.dispose();
-    _wallInputController.dispose();
     super.dispose();
   }
 
@@ -70,7 +69,10 @@ class _CommunityUserProfileScreenState
       )),
     );
 
-    final statsAsync = ref.watch(userStatsProvider(widget.userId));
+    final statsAsync = ref.watch(userStatsProvider(UserProfileParams(
+      userId: widget.userId,
+      communityId: widget.communityId,
+    )));
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -90,7 +92,7 @@ class _CommunityUserProfileScreenState
             headerSliverBuilder: (context, innerBoxIsScrolled) => [
               // Collapsible SliverAppBar
               SliverAppBar(
-                expandedHeight: 360,
+                expandedHeight: 480, // Increased to fit profile action buttons
                 pinned: true,
                 floating: false,
                 backgroundColor: Colors.black,
@@ -99,13 +101,13 @@ class _CommunityUserProfileScreenState
                   onPressed: () => Navigator.of(context).pop(),
                 ),
                 actions: [
-                  if (isOwnProfile)
-                    IconButton(
-                      icon: const Icon(Icons.settings, color: NeoColors.textPrimary),
-                      onPressed: () {
-                        _showProfileSettingsMenu(context);
-                      },
-                    ),
+                  // Unified: always show ⋯ menu for both self and other profiles
+                  IconButton(
+                    icon: const Icon(Icons.more_vert, color: NeoColors.textPrimary),
+                    onPressed: () {
+                      _showProfileMenu(context, isOwnProfile);
+                    },
+                  ),
                 ],
                 flexibleSpace: FlexibleSpaceBar(
                   collapseMode: CollapseMode.pin,
@@ -197,7 +199,29 @@ class _CommunityUserProfileScreenState
             child: statsAsync.when(
               loading: () => const SizedBox(height: 60),
               error: (_, __) => const SizedBox.shrink(),
-              data: (stats) => ProfileStatsRow(stats: stats),
+              data: (stats) => ProfileStatsRow(
+                stats: stats,
+                onFollowersTap: () {
+                  context.pushNamed(
+                    'community-connections',
+                    pathParameters: {'communityId': widget.communityId},
+                    extra: {
+                      'userId': widget.userId,
+                      'initialType': UserListType.followers,
+                    },
+                  );
+                },
+                onFollowingTap: () {
+                  context.pushNamed(
+                    'community-connections',
+                    pathParameters: {'communityId': widget.communityId},
+                    extra: {
+                      'userId': widget.userId,
+                      'initialType': UserListType.following,
+                    },
+                  );
+                },
+              ),
             ),
           ),
 
@@ -215,27 +239,55 @@ class _CommunityUserProfileScreenState
 
           const SizedBox(height: 16),
 
-          // Action buttons (with friendship support)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: ProfileActionButtons(
-              isOwnProfile: isOwnProfile,
-              otherUserId: isOwnProfile ? null : widget.userId,
-              communityId: widget.communityId,
-              isFollowing: _isFollowing,
-              onFollowTap: () {
-                setState(() {
-                  _isFollowing = !_isFollowing;
-                });
-                // TODO: Implement actual follow logic
-              },
-              onMessageTap: () {
-                // TODO: Navigate to chat
-              },
-              onEditTap: () => _navigateToEditProfile(),
-              onRequestFriendshipConfirmed: () => _handleSendFriendshipRequest(),
+          // Action buttons - ONLY for other profiles (unified layout)
+          // Self-profile: no action buttons here, edit option is in ⋯ menu
+          if (!isOwnProfile) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Consumer(
+                builder: (context, ref, child) {
+                  // Watch follow status from database
+                  final followStatusAsync = ref.watch(followStatusProvider(
+                    FollowStatusParams(
+                      communityId: widget.communityId,
+                      targetUserId: widget.userId,
+                    ),
+                  ));
+
+                  return followStatusAsync.when(
+                    loading: () => const SizedBox(
+                      height: 48,
+                      child: Center(
+                        child: CircularProgressIndicator(color: NeoColors.accent),
+                      ),
+                    ),
+                    error: (_, __) => ProfileActionButtons(
+                      isOwnProfile: false,
+                      otherUserId: widget.userId,
+                      communityId: widget.communityId,
+                      isFollowing: false,
+                      onFollowTap: () => _handleFollowToggle(false),
+                      onMessageTap: () {
+                        // TODO: Navigate to chat
+                      },
+                      onRequestFriendshipConfirmed: () => _handleSendFriendshipRequest(),
+                    ),
+                    data: (isFollowing) => ProfileActionButtons(
+                      isOwnProfile: false,
+                      otherUserId: widget.userId,
+                      communityId: widget.communityId,
+                      isFollowing: isFollowing,
+                      onFollowTap: () => _handleFollowToggle(isFollowing),
+                      onMessageTap: () {
+                        // TODO: Navigate to chat
+                      },
+                      onRequestFriendshipConfirmed: () => _handleSendFriendshipRequest(),
+                    ),
+                  );
+                },
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -255,7 +307,8 @@ class _CommunityUserProfileScreenState
     )));
   }
 
-  void _showProfileSettingsMenu(BuildContext context) {
+  /// Unified profile menu for both self and other profiles
+  void _showProfileMenu(BuildContext context, bool isOwnProfile) {
     final community = ref.read(communityByIdProvider(widget.communityId));
     
     showModalBottomSheet(
@@ -276,13 +329,13 @@ class _CommunityUserProfileScreenState
                 child: Row(
                   children: [
                     const Icon(
-                      Icons.settings,
+                      Icons.more_vert,
                       color: NeoColors.textPrimary,
                     ),
                     const SizedBox(width: 12),
-                    const Text(
-                      'Configuración de Perfil',
-                      style: TextStyle(
+                    Text(
+                      isOwnProfile ? 'Opciones de Perfil' : 'Opciones',
+                      style: const TextStyle(
                         color: NeoColors.textPrimary,
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -291,111 +344,151 @@ class _CommunityUserProfileScreenState
                   ],
                 ),
               ),
-              const Divider(color: NeoColors.border, height: 1),
+              const SizedBox(height: 8),
               
-              // Títulos option
-              ListTile(
-                leading: const Icon(
-                  Icons.workspace_premium_outlined,
+              // Self profile options
+              if (isOwnProfile) ...[
+                _buildMenuOption(
+                  context: context,
+                  icon: Icons.edit_outlined,
+                  title: 'Editar Perfil',
+                  subtitle: 'Cambia tu identidad local',
+                  onTap: () {
+                    Navigator.pop(context);
+                    _navigateToEditProfile();
+                  },
+                ),
+                _buildMenuOption(
+                  context: context,
+                  icon: Icons.workspace_premium_outlined,
+                  title: 'Títulos',
+                  subtitle: 'Gestiona tus títulos de la comunidad',
                   color: NeoColors.accent,
+                  onTap: () {
+                    Navigator.pop(context);
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      community.when(
+                        data: (comm) {
+                          if (comm != null) {
+                            context.pushNamed(
+                              'user-titles-settings',
+                              pathParameters: {'communityId': widget.communityId},
+                              extra: {
+                                'name': comm.title,
+                                'color': _parseColor(comm.theme.primaryColor),
+                              },
+                            );
+                          }
+                        },
+                        loading: () {},
+                        error: (_, __) {},
+                      );
+                    });
+                  },
                 ),
-                title: const Text(
-                  'Títulos',
-                  style: TextStyle(color: NeoColors.textPrimary),
-                ),
-                subtitle: const Text(
-                  'Gestiona tus títulos de la comunidad',
-                  style: TextStyle(color: NeoColors.textSecondary, fontSize: 12),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  
-                  // Defer navigation until sheet is fully closed
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    community.when(
-                      data: (comm) {
-                        if (comm != null) {
-                          context.pushNamed(
-                            'user-titles-settings',
-                            pathParameters: {'communityId': widget.communityId},
-                            extra: {
-                              'name': comm.title,
-                              'color': _parseColor(comm.theme.primaryColor),
-                            },
-                          );
-                        }
-                      },
-                      loading: () {},
-                      error: (_, __) {},
-                    );
-                  });
-                },
-              ),
-              
-              // Solicitar Título option (NEW)
-              ListTile(
-                leading: const Icon(
-                  Icons.add_circle_outline,
+                _buildMenuOption(
+                  context: context,
+                  icon: Icons.add_circle_outline,
+                  title: 'Solicitar Título',
+                  subtitle: 'Crea un título personalizado',
                   color: Colors.green,
+                  onTap: () {
+                    Navigator.pop(context);
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      community.when(
+                        data: (comm) {
+                          if (comm != null) {
+                            context.pushNamed(
+                              'request-title',
+                              pathParameters: {'communityId': widget.communityId},
+                              extra: {
+                                'name': comm.title,
+                                'color': _parseColor(comm.theme.primaryColor),
+                              },
+                            );
+                          }
+                        },
+                        loading: () {},
+                        error: (_, __) {},
+                      );
+                    });
+                  },
                 ),
-                title: const Text(
-                  'Solicitar Título',
-                  style: TextStyle(color: NeoColors.textPrimary),
+                _buildMenuOption(
+                  context: context,
+                  icon: Icons.create_outlined,
+                  title: 'Crear publicación',
+                  subtitle: 'Publica algo en tu muro',
+                  color: NeoColors.accent,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showCreatePostDialog();
+                  },
                 ),
-                subtitle: const Text(
-                  'Crea un título personalizado',
-                  style: TextStyle(color: NeoColors.textSecondary, fontSize: 12),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  
-                  // Defer navigation until sheet is fully closed
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    community.when(
-                      data: (comm) {
-                        if (comm != null) {
-                          context.pushNamed(
-                            'request-title',
-                            pathParameters: {'communityId': widget.communityId},
-                            extra: {
-                              'name': comm.title,
-                              'color': _parseColor(comm.theme.primaryColor),
-                            },
-                          );
-                        }
-                      },
-                      loading: () {},
-                      error: (_, __) {},
+              ] else ...[
+                // Other user profile options (placeholders for future moderation features)
+                _buildMenuOption(
+                  context: context,
+                  icon: Icons.flag_outlined,
+                  title: 'Reportar',
+                  subtitle: 'Reportar contenido inapropiado',
+                  color: NeoColors.error,
+                  onTap: () {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Próximamente: Reportar usuario'),
+                        backgroundColor: NeoColors.error,
+                      ),
                     );
-                  });
-                },
-              ),
-              
-              // Editar Perfil option
-              ListTile(
-                leading: const Icon(
-                  Icons.edit_outlined,
-                  color: Colors.white,
+                  },
                 ),
-                title: const Text(
-                  'Editar Perfil',
-                  style: TextStyle(color: NeoColors.textPrimary),
+                _buildMenuOption(
+                  context: context,
+                  icon: Icons.block_outlined,
+                  title: 'Bloquear',
+                  subtitle: 'Bloquear a este usuario',
+                  color: NeoColors.error,
+                  onTap: () {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Próximamente: Bloquear usuario'),
+                        backgroundColor: NeoColors.error,
+                      ),
+                    );
+                  },
                 ),
-                subtitle: const Text(
-                  'Cambia tu identidad local',
-                  style: TextStyle(color: NeoColors.textSecondary, fontSize: 12),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _navigateToEditProfile();
-                },
-              ),
+              ],
               
               const SizedBox(height: 8),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  /// Helper method to build menu options
+  Widget _buildMenuOption({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    Color? color,
+  }) {
+    return ListTile(
+      leading: Icon(icon, color: color ?? Colors.white),
+      title: Text(
+        title,
+        style: TextStyle(color: color ?? NeoColors.textPrimary),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: const TextStyle(color: NeoColors.textSecondary, fontSize: 12),
+      ),
+      onTap: onTap,
     );
   }
 
@@ -423,6 +516,69 @@ class _CommunityUserProfileScreenState
         ],
       ),
     );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FOLLOW ACTIONS (BUGFIX)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Handle follow/unfollow toggle
+  Future<void> _handleFollowToggle(bool currentlyFollowing) async {
+    try {
+      final notifier = ref.read(followActionsProvider.notifier);
+      
+      final success = await notifier.toggleFollow(
+        communityId: widget.communityId,
+        targetUserId: widget.userId,
+        currentlyFollowing: currentlyFollowing,
+      );
+
+      if (success) {
+        // Invalidate follow status
+        ref.invalidate(followStatusProvider(FollowStatusParams(
+          communityId: widget.communityId,
+          targetUserId: widget.userId,
+        )));
+
+        // Also invalidate friendship status (depends on mutual follow)
+        ref.invalidate(friendshipStatusProvider(FriendshipCheckParams(
+          communityId: widget.communityId,
+          otherUserId: widget.userId,
+        )));
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(currentlyFollowing ? 'Dejaste de seguir' : '✓ Siguiendo'),
+              backgroundColor: currentlyFollowing ? NeoColors.textSecondary : Colors.green,
+              duration: const Duration(seconds: 1),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Error al actualizar seguimiento'),
+              backgroundColor: NeoColors.error,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Error toggling follow: $e');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: NeoColors.error,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -513,10 +669,6 @@ class _CommunityUserProfileScreenState
         child: ListView(
           padding: const EdgeInsets.all(NeoSpacing.md),
           children: [
-            // Wall input composer
-            _buildWallInput(user, isOwnProfile),
-            const SizedBox(height: NeoSpacing.lg),
-
             // Wall posts
             wallPostsAsync.when(
               loading: () => const Center(
@@ -548,9 +700,7 @@ class _CommunityUserProfileScreenState
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            isOwnProfile 
-                                ? 'Tu muro está vacío\n¡Comparte algo!'
-                                : 'Aún no hay publicaciones en este muro',
+                            'Aún no hay publicaciones en este muro',
                             textAlign: TextAlign.center,
                             style: NeoTextStyles.bodyMedium.copyWith(
                               color: NeoColors.textTertiary,
@@ -563,41 +713,20 @@ class _CommunityUserProfileScreenState
                 }
 
                 return Column(
-                  children: posts.map((post) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: NeoSpacing.md),
-                      child: WallPostCard(
-                        post: post,
-                        isProfilePost: true,
-                        onDelete: () async {
-                          final confirmed = await DestructiveActionDialog.confirmDelete(
-                            context: context,
-                            itemName: 'esta publicación',
-                          );
-
-                          if (confirmed && mounted) {
-                            final notifier = ref.read(
-                              userWallPostsProvider(WallPostsFilter(
-                                userId: widget.userId,
-                                communityId: widget.communityId,
-                              )).notifier,
-                            );
-                            await notifier.deleteWallPost(post.id);
-                          }
-                        },
-                        onLike: () async {
-                          final notifier = ref.read(
-                            userWallPostsProvider(WallPostsFilter(
-                              userId: widget.userId,
-                              communityId: widget.communityId,
-                            )).notifier,
-                          );
-                          await notifier.toggleLike(post.id);
-                        },
-                        onComment: () {
-                          // Navigate to thread
-                        },
-                      ),
+                  children: posts.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final post = entry.value;
+                    final isLast = index == posts.length - 1;
+                    
+                    return ThreadPostItem(
+                      authorId: post.authorId,
+                      authorUsername: post.authorName,
+                      authorAvatarUrl: post.authorAvatar,
+                      content: post.content,
+                      createdAt: post.timestamp,
+                      isLast: isLast,
+                      likesCount: post.likes,
+                      commentsCount: post.commentsCount,
                     );
                   }).toList(),
                 );
@@ -609,83 +738,103 @@ class _CommunityUserProfileScreenState
     );
   }
 
-  Widget _buildWallInput(UserEntity user, bool isOwnProfile) {
-    final placeholder = isOwnProfile
-        ? 'Comparte algo en tu muro...'
-        : 'Escribe en el muro de ${user.username}...';
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: NeoColors.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: NeoColors.border, width: 1),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _wallInputController,
-              style: const TextStyle(color: Colors.white, fontSize: 14),
+  /// Show dialog to create a wall post
+  void _showCreatePostDialog() {
+    final TextEditingController dialogController = TextEditingController();
+    bool isPosting = false;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: NeoColors.card,
+            title: const Text(
+              'Crear publicación',
+              style: TextStyle(color: NeoColors.textPrimary),
+            ),
+            content: TextField(
+              controller: dialogController,
+              autofocus: true,
+              maxLines: 5,
+              style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                hintText: placeholder,
-                hintStyle: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.4),
-                  fontSize: 14,
+                hintText: 'Escribe algo en tu muro...',
+                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: NeoColors.border),
                 ),
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.zero,
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: NeoColors.border),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: NeoColors.accent),
+                ),
               ),
-              maxLines: null,
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) => _handleSendPost(),
             ),
-          ),
-          if (_isPostingToWall)
-            const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2, color: NeoColors.accent),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.send, color: NeoColors.accent, size: 20),
-              onPressed: _handleSendPost,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-            ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: isPosting ? null : () => Navigator.pop(dialogContext),
+                child: const Text('Cancelar'),
+              ),
+              ElevatedButton(
+                onPressed: isPosting
+                    ? null
+                    : () async {
+                        final content = dialogController.text.trim();
+                        if (content.isEmpty) return;
+
+                        setDialogState(() => isPosting = true);
+
+                        final success = await ref
+                            .read(userWallPostsProvider(WallPostsFilter(
+                              userId: widget.userId,
+                              communityId: widget.communityId,
+                            )).notifier)
+                            .createWallPost(content);
+
+                        if (!dialogContext.mounted) return;
+                        
+                        Navigator.pop(dialogContext);
+                        
+                        if (!context.mounted) return;
+                        
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              success
+                                  ? 'Publicación creada'
+                                  : 'Error al crear publicación',
+                            ),
+                            backgroundColor:
+                                success ? Colors.green : NeoColors.error,
+                          ),
+                        );
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: NeoColors.accent,
+                  foregroundColor: Colors.white,
+                ),
+                child: isPosting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Publicar'),
+              ),
+            ],
+          );
+        },
       ),
     );
-  }
-
-  Future<void> _handleSendPost() async {
-    final content = _wallInputController.text.trim();
-    if (content.isEmpty || _isPostingToWall) return;
-
-    setState(() => _isPostingToWall = true);
-
-    final success = await ref
-        .read(userWallPostsProvider(WallPostsFilter(
-          userId: widget.userId,
-          communityId: widget.communityId,
-        )).notifier)
-        .createWallPost(content);
-
-    setState(() => _isPostingToWall = false);
-
-    if (success) {
-      _wallInputController.clear();
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Error al publicar. Intenta de nuevo.'),
-            backgroundColor: NeoColors.error,
-          ),
-        );
-      }
-    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -747,6 +896,50 @@ class _CommunityUserProfileScreenState
   // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildActividadTab() {
+    final globalUser = ref.watch(currentUserProvider);
+    final isOwnProfile = widget.userId == globalUser?.id;
+    
+    // Show private message for other user profiles
+    if (!isOwnProfile) {
+      return Container(
+        color: Colors.black,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.lock_outline,
+                  size: 64,
+                  color: NeoColors.textTertiary.withValues(alpha: 0.5),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Actividad privada',
+                  style: TextStyle(
+                    color: NeoColors.textSecondary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Solo el dueño del perfil puede ver esta sección',
+                  style: TextStyle(
+                    color: NeoColors.textTertiary,
+                    fontSize: 14,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    
+    // Placeholder for own profile activity (future feature)
     return Container(
       color: Colors.black,
       padding: const EdgeInsets.all(NeoSpacing.md),

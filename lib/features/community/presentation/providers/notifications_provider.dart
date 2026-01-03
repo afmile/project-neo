@@ -7,13 +7,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/entities/community_notification.dart';
 import '../../data/repositories/notifications_repository.dart';
+import './friendship_provider.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // REPOSITORY PROVIDER
 // ═══════════════════════════════════════════════════════════════════════════
 
 final notificationsRepositoryProvider = Provider<NotificationsRepository>((ref) {
-  return NotificationsRepository(Supabase.instance.client);
+  final friendshipRepo = ref.read(friendshipRepositoryProvider);
+  return NotificationsRepository(Supabase.instance.client, friendshipRepo);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -101,6 +103,8 @@ class NotificationActionsNotifier extends StateNotifier<AsyncValue<void>> {
   void _invalidateProviders() {
     _ref.invalidate(communityNotificationsProvider(communityId));
     _ref.invalidate(unreadNotificationsCountProvider(communityId));
+    // Also invalidate friendship-related providers since notifications may be friendship requests
+    _ref.invalidate(pendingFriendshipRequestsProvider(communityId));
   }
 }
 

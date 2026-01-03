@@ -35,6 +35,8 @@ import '../../features/community/presentation/screens/community_screen.dart';
 import '../../features/community/presentation/screens/community_home_screen.dart';
 import '../../features/community/presentation/screens/community_preview_screen.dart';
 import '../../features/community/presentation/screens/community_user_profile_screen.dart';
+import '../../features/community/presentation/screens/community_users_list_screen.dart';
+import '../../features/community/presentation/screens/community_connections_screen.dart';
 import '../../features/notifications/presentation/screens/notifications_screen.dart';
 import '../../features/discovery/presentation/screens/discovery_screen.dart';
 import '../../features/blog/presentation/screens/blog_detail_screen.dart';
@@ -304,6 +306,38 @@ final routerProvider = Provider<GoRouter>((ref) {
           return CommunityUserProfileScreen(
             userId: params['userId']!,
             communityId: params['communityId']!,
+          );
+        },
+      ),
+
+      // Community Users List
+      GoRoute(
+        path: '/community/:communityId/users-list',
+        name: 'community-users-list',
+        parentNavigatorKey: rootNavigatorKey, // Hide global nav
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>;
+          return CommunityUsersListScreen(
+            communityId: state.pathParameters['communityId']!,
+            userId: extra['userId'] as String,
+            type: extra['type'] as UserListType,
+          );
+        },
+      ),
+
+      // Community Connections (Followers/Following Tabbed)
+      GoRoute(
+        path: '/community/:communityId/connections',
+        name: 'community-connections',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>;
+          return CommunityConnectionsScreen(
+            communityId: state.pathParameters['communityId']!,
+            userId: extra['userId'] as String,
+            // Map UserListType (from generic) to this screen type if needed, or pass explicitly
+            // But we defined initialType as UserListType in the widget
+            initialType: extra['initialType'] as UserListType,
           );
         },
       ),

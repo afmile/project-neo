@@ -27,32 +27,9 @@ class _ProfileBioCardState extends State<ProfileBioCard> {
 
   @override
   Widget build(BuildContext context) {
+    // Hide bio card entirely if bio is empty (for both own and other profiles)
     if (widget.bio == null || widget.bio!.trim().isEmpty) {
-      if (!widget.isOwnProfile) {
-        return const SizedBox.shrink(); // Don't show empty bio for others
-      }
-      
-      // Show placeholder for own profile
-      return _buildCard(
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Cuéntale a la comunidad sobre tí',
-                style: NeoTextStyles.bodyMedium.copyWith(
-                  color: NeoColors.textTertiary,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.add_circle_outline),
-              color: NeoColors.accent,
-              onPressed: widget.onEditTap,
-            ),
-          ],
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
     final bio = widget.bio!;
@@ -85,23 +62,6 @@ class _ProfileBioCardState extends State<ProfileBioCard> {
                 style: NeoTextStyles.labelMedium.copyWith(
                   color: NeoColors.accent,
                   fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-          
-          // Edit button for own profile
-          if (widget.isOwnProfile) ...[
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: widget.onEditTap,
-                icon: const Icon(Icons.edit, size: 16),
-                label: const Text('Editar'),
-                style: TextButton.styleFrom(
-                  foregroundColor: NeoColors.accent,
-                  textStyle: NeoTextStyles.labelMedium,
                 ),
               ),
             ),

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'community_follow_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../auth/data/models/user_model.dart';
 import '../../../auth/domain/entities/user_entity.dart';
@@ -105,40 +106,46 @@ final userProfileProvider = FutureProvider.family<UserEntity?, UserProfileParams
 // ═══════════════════════════════════════════════════════════════════════════
 
 /// Provider to fetch user statistics (followers, following, wall posts count)
-final userStatsProvider = FutureProvider.family<UserStats, String>((ref, userId) async {
+// ═══════════════════════════════════════════════════════════════════════════
+// USER STATS PROVIDER
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Provider to fetch user statistics (followers, following, wall posts count)
+/// Scoped to community and reactive to follow changes
+final userStatsProvider = FutureProvider.autoDispose.family<UserStats, UserProfileParams>((ref, params) async {
   final supabase = Supabase.instance.client;
+  final communityId = params.communityId;
+  final userId = params.userId;
 
-  try {
-    // Run all count queries in parallel
-    final results = await Future.wait<int>([
-      // Count followers (users following this user)
-      supabase
-          .from('followers')
-          .count(CountOption.exact)
-          .eq('following_id', userId),
-      
-      // Count following (users this user is following)
-      supabase
-          .from('followers')
-          .count(CountOption.exact)
-          .eq('follower_id', userId),
-      
-      // Count profile wall posts (from profile_wall_posts table)
-      supabase
-          .from('profile_wall_posts')
-          .count(CountOption.exact)
-          .eq('profile_user_id', userId),
-    ]);
-
-    return UserStats(
-      followersCount: results[0],
-      followingCount: results[1],
-      wallPostsCount: results[2],
-    );
-  } catch (e) {
-    // Return zeros on error
+  if (communityId == null) {
+    // Fallback for global context (should not happen in current flow)
     return const UserStats();
   }
+
+  // 1. Get reactive follow counts
+  // We use ref.watch on the specific count providers so this provider rebuilds
+  // automatically when they are invalidated by FollowActionsNotifier
+  final followParams = FollowStatusParams(
+    communityId: communityId,
+    targetUserId: userId,
+  );
+
+  final followersCount = await ref.watch(communityFollowerCountProvider(followParams).future);
+  final followingCount = await ref.watch(communityFollowingCountProvider(followParams).future);
+
+  // 2. Get wall posts count (scoped to availability in profile wall)
+  // TODO: Create a separate provider for this if we want realtime/invalidation support for posts count
+  final postsCount = await supabase
+      .from('profile_wall_posts')
+      .count(CountOption.exact)
+      .eq('profile_user_id', userId)
+      .eq('community_id', communityId);
+
+  return UserStats(
+    followersCount: followersCount,
+    followingCount: followingCount,
+    wallPostsCount: postsCount,
+  );
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -175,6 +175,7 @@ class ProfileScreen extends ConsumerWidget {
               pinned: true,
               delegate: _SliverTabBarDelegate(
                 TabBar(
+                  dividerColor: Colors.transparent, // Remove white line
                   labelColor: NeoColors.accent,
                   unselectedLabelColor: NeoColors.textSecondary,
                   indicatorColor: NeoColors.accent,
