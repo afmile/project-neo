@@ -4,6 +4,7 @@
 library;
 
 import 'package:equatable/equatable.dart';
+import '../../domain/entities/wall_post_comment.dart';
 
 /// Privacy levels for wall posts
 enum WallPrivacyLevel {
@@ -48,6 +49,15 @@ class WallPost extends Equatable {
   /// Number of comments on this post
   final int commentsCount;
 
+  /// First comment to display in feed (threaded visual)
+  final WallPostComment? firstComment;
+  
+  /// Optional media URL (image or GIF)
+  final String? mediaUrl;
+  
+  /// Media type ('image' or 'gif')
+  final String? mediaType;
+
   const WallPost({
     required this.id,
     required this.communityId,
@@ -59,6 +69,9 @@ class WallPost extends Equatable {
     this.likes = 0,
     this.isLikedByCurrentUser = false,
     this.commentsCount = 0,
+    this.firstComment,
+    this.mediaUrl,
+    this.mediaType,
   });
 
   WallPost copyWith({
@@ -72,6 +85,9 @@ class WallPost extends Equatable {
     int? likes,
     bool? isLikedByCurrentUser,
     int? commentsCount,
+    WallPostComment? firstComment,
+    String? mediaUrl,
+    String? mediaType,
   }) {
     return WallPost(
       id: id ?? this.id,
@@ -84,6 +100,9 @@ class WallPost extends Equatable {
       likes: likes ?? this.likes,
       isLikedByCurrentUser: isLikedByCurrentUser ?? this.isLikedByCurrentUser,
       commentsCount: commentsCount ?? this.commentsCount,
+      firstComment: firstComment ?? this.firstComment,
+      mediaUrl: mediaUrl ?? this.mediaUrl,
+      mediaType: mediaType ?? this.mediaType,
     );
   }
 
@@ -99,5 +118,8 @@ class WallPost extends Equatable {
         likes,
         isLikedByCurrentUser,
         commentsCount,
+        firstComment,
+        mediaUrl,
+        mediaType,
       ];
 }

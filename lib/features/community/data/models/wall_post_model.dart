@@ -4,6 +4,7 @@
 library;
 
 import '../../domain/entities/wall_post.dart';
+import '../../domain/entities/wall_post_comment.dart';
 
 class WallPostModel {
   /// Convert from Supabase JSON to WallPost entity
@@ -28,6 +29,11 @@ class WallPostModel {
       likes: json['likes_count'] as int? ?? 0,
       isLikedByCurrentUser: isLikedByMe,
       commentsCount: json['comments_count'] as int? ?? 0,
+      firstComment: (json['wall_post_comments'] as List?)?.isNotEmpty == true
+          ? WallPostComment.fromSupabase(json['wall_post_comments'][0], currentUserId)
+          : null,
+      mediaUrl: json['media_url'] as String?,
+      mediaType: json['media_type'] as String?,
     );
   }
 

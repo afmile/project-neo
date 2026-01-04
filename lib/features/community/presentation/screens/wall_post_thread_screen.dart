@@ -1,4 +1,4 @@
-/// Project Neo - Wall Post Thread Screen
+﻿/// Project Neo - Wall Post Thread Screen
 ///
 /// Dedicated screen for a single wall post thread (parent + comments)
 /// Design matches minimal "Threads" aesthetic
@@ -8,17 +8,16 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:timeago/timeago.dart' as timeago;
 import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../domain/entities/wall_post.dart';
 import '../../domain/entities/wall_post_comment.dart';
 import '../../data/models/wall_post_comment_model.dart';
-import '../widgets/wall_post_item.dart';
+import '../widgets/bento_post_card.dart';
+import '../widgets/post_options_sheet.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../core/widgets/telegram_input_bar.dart';
-import '../../../../core/widgets/report_modal.dart';
-import '../providers/community_providers.dart';
 import '../providers/wall_posts_paginated_provider.dart';
 import 'public_user_profile_screen.dart';
 
@@ -42,6 +41,7 @@ class WallPostThreadScreen extends ConsumerStatefulWidget {
 
 class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
   final TextEditingController _commentController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   final FocusNode _commentFocusNode = FocusNode();
   final ImagePicker _picker = ImagePicker();
   
@@ -94,14 +94,14 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
             .delete()
             .eq('post_id', widget.post.id)
             .eq('user_id', userId);
-        debugPrint('👎 Unliked from $likesTable');
+        debugPrint('ðŸ‘Ž Unliked from $likesTable');
       } else {
         // Like: insert
         await supabase.from(likesTable).insert({
           'post_id': widget.post.id,
           'user_id': userId,
         });
-        debugPrint('👍 Liked in $likesTable');
+        debugPrint('ðŸ‘ Liked in $likesTable');
       }
     } catch (e) {
       // Rollback on error
@@ -122,6 +122,7 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
   @override
   void dispose() {
     _commentController.dispose();
+    _scrollController.dispose();
     _commentFocusNode.dispose();
     super.dispose();
   }
@@ -276,6 +277,20 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
       // Refresh comments in thread
       await _fetchComments();
       
+      // Animate scroll to bottom to show new comment "entering" the card
+      if (mounted) {
+        // Small delay to ensure list is rebuilt
+        await Future.delayed(const Duration(milliseconds: 100));
+        
+        if (_scrollController.hasClients) {
+          await _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 500),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      }
+
       // Invalidate feed provider to update comments_count in Home
       ref.invalidate(wallPostsPaginatedProvider(widget.post.communityId));
       
@@ -320,34 +335,36 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
             // Scrollable Content
             Expanded(
               child: CustomScrollView(
+                controller: _scrollController,
                 slivers: [
                   // Parent Post
                   SliverToBoxAdapter(
-                    child: Stack(
-                      children: [
-                        // No vertical line - using indentation only for cleaner look
-                          
-                        WallPostItem(
-                          post: widget.post.copyWith(
-                            isLikedByCurrentUser: _isLiked,
-                            likes: _likesCount,
-                          ),
-                          onLike: _toggleLike,
-                          onReply: () => _commentFocusNode.requestFocus(),
-                        ),
-                      ],
+                    child: BentoPostCard(
+                      post: widget.post.copyWith(
+                        isLikedByCurrentUser: _isLiked,
+                        likes: _likesCount,
+                      ),
+                      onLike: _toggleLike,
+                      onComment: () => _commentFocusNode.requestFocus(),
+                      hideMoreCommentsLink: true, // Already in thread, all comments visible below
+                      // If there are visible comments (list not empty), unround bottom
+                      forceUnroundedBottom: _comments != null && _comments!.where((c) {
+                             if (widget.post.firstComment == null) return true;
+                             return c.id != widget.post.firstComment!.id;
+                        }).isNotEmpty,
                     ),
                   ),
                   
-                  // Comments List
+                  // Comments List (Unified Card Style)
                   if (_isLoading)
-                    const SliverFillRemaining(
+                     const SliverFillRemaining(
                       child: Center(
                         child: CircularProgressIndicator(color: NeoColors.accent),
                       ),
                     )
                   else if (_comments == null || _comments!.isEmpty)
-                     const SliverToBoxAdapter(
+                     // If no comments, show empty state (optional, or just nothing)
+                      const SliverToBoxAdapter(
                        child: Padding(
                          padding: EdgeInsets.all(32.0),
                          child: Center(
@@ -359,15 +376,49 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
                        ),
                      )
                   else
-                    SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final comment = _comments![index];
-                          
-                          // No horizontal connectors - straight vertical line only
-                          return _buildThreadCommentItem(comment);
-                        },
-                        childCount: _comments!.length,
+                    SliverPadding(
+                       // Match BentoPostCard horizontal padding (16)
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            // Filter out duplicate first comment
+                            final visibleComments = _comments!.where((c) {
+                               if (widget.post.firstComment == null) return true;
+                               return c.id != widget.post.firstComment!.id;
+                            }).toList();
+                            
+                            if (index >= visibleComments.length) return null;
+
+                            final comment = visibleComments[index];
+                            final isLast = index == visibleComments.length - 1;
+                            
+                            // Visual container for the comment item
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 20), // Match BentoPostCard inner padding
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1A2633), // Match Bento Card
+                                // Only round bottom if last
+                                borderRadius: isLast 
+                                    ? const BorderRadius.vertical(bottom: Radius.circular(24.0))
+                                    : null,
+                                // Borders (sides + bottom if last)
+                                border: Border(
+                                  left: BorderSide(color: Colors.white.withValues(alpha: 0.05), width: 0.5),
+                                  right: BorderSide(color: Colors.white.withValues(alpha: 0.05), width: 0.5),
+                                  bottom: isLast 
+                                      ? BorderSide(color: Colors.white.withValues(alpha: 0.05), width: 0.5)
+                                      : BorderSide.none,
+                                ),
+                              ),
+                              child: _buildThreadCommentItem(comment, isLast: isLast),
+                            );
+                          },
+                          childCount: _comments!.where((c) {
+                               if (widget.post.firstComment == null) return true;
+                               return c.id != widget.post.firstComment!.id;
+                          }).length,
+                        ),
                       ),
                     ),
                     
@@ -394,182 +445,208 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
     );
   }
 
-  Widget _buildThreadCommentItem(WallPostComment comment) {
+  Widget _buildThreadCommentItem(WallPostComment comment, {required bool isLast}) {
     final authState = ref.read(authProvider);
     final currentUserId = authState.user?.id;
     final isAuthor = currentUserId == comment.authorId;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Indentation for threaded look (replaces vertical line)
-          const SizedBox(width: 24),
-          
-          // Avatar - Tappable to navigate to profile
-          GestureDetector(
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => PublicUserProfileScreen(
-                  userId: comment.authorId,
-                  communityId: widget.post.communityId,
-                ),
-              ),
-            ),
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                   color: Colors.grey.withValues(alpha: 0.2),
-                   width: 1,
-                ),
-              ),
-               child: comment.authorAvatar != null
-                  ? ClipOval(
-                      child: Image.network(
-                        comment.authorAvatar!,
-                        fit: BoxFit.cover,
+      // Keep vertical loose but remove horizontal padding as parent container handles edges
+      padding: EdgeInsets.zero,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Thread Line & Avatar Column
+            SizedBox(
+              width: 40, // 40 + 12 (sized box) = 52 total left rail, matches BentoPostCard
+              child: Stack(
+                alignment: Alignment.topCenter,
+                children: [
+                  // Vertical Thread Line
+                  // Extends from top. If last, stops at avatar center (20px). Else goes full height.
+                  // But since parent line needs to connect, we start from top.
+                  Positioned(
+                    top: 0,
+                    bottom: isLast ? null : 0,
+                    height: isLast ? 24 : null, // Stop at approx center of avatar area
+                    child: Container(
+                      width: 2,
+                      color: Colors.white.withValues(alpha: 0.1),
+                    ),
+                  ),
+                  
+                  // Avatar with spacing from top to align with text
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4.0), // Slight top offset
+                    child: GestureDetector(
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => PublicUserProfileScreen(
+                            userId: comment.authorId,
+                            communityId: widget.post.communityId,
+                          ),
+                        ),
                       ),
-                    )
-                  : const Icon(Icons.person, size: 20, color: Colors.grey),
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: const Color(0xFF1A2633), // Match background to hide line behind
+                          border: Border.all(
+                             color: Colors.white.withValues(alpha: 0.1),
+                             width: 1,
+                          ),
+                        ),
+                         child: comment.authorAvatar != null
+                            ? ClipOval(
+                                child: Image.network(
+                                  comment.authorAvatar!,
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                            : Center(
+                                child: Text(
+                                  comment.authorName[0].toUpperCase(),
+                                  style: const TextStyle(
+                                    color: NeoColors.accent,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          
-          const SizedBox(width: 12),
-          
-          // Content
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header with menu
-                Row(
-                   children: [
-                     Expanded(
-                       child: Row(
-                         children: [
-                           GestureDetector(
-                             onTap: () => Navigator.of(context).push(
-                               MaterialPageRoute(
-                                 builder: (context) => PublicUserProfileScreen(
-                                   userId: comment.authorId,
-                                   communityId: widget.post.communityId,
-                                 ),
-                               ),
-                             ),
-                             child: Text(
-                               comment.authorName,
-                               style: const TextStyle(
-                                 color: Colors.white,
-                                 fontWeight: FontWeight.bold,
-                                 fontSize: 14,
-                               ),
-                             ),
+            
+            const SizedBox(width: 12),
+            
+            // Content Column
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 24.0, top: 4.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header: Name + Time + Menu
+                    Row(
+                       children: [
+                         Text(
+                           comment.authorName,
+                           style: const TextStyle(
+                             color: Colors.white,
+                             fontWeight: FontWeight.w600,
+                             fontSize: 15,
                            ),
-                           const SizedBox(width: 6),
-                           Text(
-                             timeago.format(comment.createdAt),
-                             style: TextStyle(
-                               color: Colors.grey.withValues(alpha: 0.6),
-                               fontSize: 13, 
-                             ),
+                         ),
+                         const SizedBox(width: 8),
+                         Text(
+                           _formatTime(comment.createdAt),
+                           style: TextStyle(
+                             color: Colors.grey[500],
+                             fontSize: 13,
                            ),
-                         ],
-                       ),
-                     ),
-                     // 3-dot menu
-                     PopupMenuButton<String>(
-                       icon: Icon(
-                         Icons.more_horiz,
-                         color: Colors.grey.withValues(alpha: 0.6),
-                         size: 18,
-                       ),
-                       color: Colors.grey[900],
-                       onSelected: (value) async {
-                         if (value == 'delete') {
-                           await _deleteComment(comment.id);
-                         } else if (value == 'report') {
-                           showReportModal(
-                             context: context,
-                             targetType: 'comment',
-                             targetId: comment.id,
-                           );
-                         }
-                       },
-                       itemBuilder: (context) => [
-                         if (isAuthor)
-                           const PopupMenuItem(
-                             value: 'delete',
-                             child: Row(
-                               children: [
-                                 Icon(Icons.delete_outline, color: Colors.red, size: 18),
-                                 SizedBox(width: 8),
-                                 Text('Eliminar', style: TextStyle(color: Colors.red)),
-                               ],
-                             ),
-                           ),
-                         if (!isAuthor)
-                           const PopupMenuItem(
-                             value: 'report',
-                             child: Row(
-                               children: [
-                                 Icon(Icons.flag_outlined, color: Colors.white, size: 18),
-                                 SizedBox(width: 8),
-                                 Text('Reportar', style: TextStyle(color: Colors.white)),
-                               ],
-                             ),
-                           ),
+                         ),
+                         const Spacer(),
+                         // 3-dot menu (always show)
+                         IconButton(
+                           onPressed: () {
+                             showPostOptionsSheet(
+                               context,
+                               content: comment.content,
+                               showDelete: isAuthor || (widget.post.authorId == currentUserId),
+                               onDelete: () => _deleteComment(comment.id),
+                             );
+                           },
+                           icon: Icon(Icons.more_horiz, color: Colors.grey[500], size: 20),
+                           padding: EdgeInsets.zero,
+                           constraints: const BoxConstraints(),
+                         ),
                        ],
-                     ),
-                   ],
-                ),
-                
-                const SizedBox(height: 4),
-                
-                // Image parsing logic
-                _buildCommentContent(comment.content),
-                
-                const SizedBox(height: 8),
-                
-                // Comment like button
-                GestureDetector(
-                  onTap: () => _toggleCommentLike(comment),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        comment.isLikedByCurrentUser 
-                            ? Icons.favorite 
-                            : Icons.favorite_border,
-                        size: 18,
-                        color: comment.isLikedByCurrentUser 
-                            ? Colors.red 
-                            : Colors.grey,
-                      ),
-                      if (comment.likesCount > 0) ...[
-                        const SizedBox(width: 4),
-                        Text(
-                          '${comment.likesCount}',
-                          style: TextStyle(
-                            color: comment.isLikedByCurrentUser 
-                                ? Colors.red 
-                                : Colors.grey,
-                            fontSize: 13,
+                    ),
+                    
+                    const SizedBox(height: 4),
+                    
+                    // Comment Text (Markdown/Images)
+                    _buildCommentContent(comment.content),
+                    
+                    const SizedBox(height: 12),
+                    
+                    // Actions: Like, Reply
+                    Row(
+                      children: [
+                        // Likes
+                        InkWell(
+                          onTap: () => _toggleCommentLike(comment),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                comment.isLikedByCurrentUser ? Icons.favorite : Icons.favorite_border,
+                                color: comment.isLikedByCurrentUser ? Colors.red : Colors.grey[500],
+                                size: 16,
+                              ),
+                              if (comment.likesCount > 0) ...[
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${comment.likesCount}',
+                                  style: TextStyle(
+                                    color: Colors.grey[500],
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        
+                        const SizedBox(width: 24),
+                        
+                        // Reply (just focus input)
+                        InkWell(
+                          onTap: () {
+                             _commentController.text = '@${comment.authorName} ';
+                             _commentFocusNode.requestFocus();
+                          },
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.reply, color: Colors.grey[500], size: 16),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Responder',
+                                style: TextStyle(
+                                  color: Colors.grey[500],
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
+  }
+
+  String _formatTime(DateTime time) {
+    final now = DateTime.now();
+    final diff = now.difference(time);
+    
+    if (diff.inMinutes < 1) return 'ahora';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
+    if (diff.inHours < 24) return '${diff.inHours}h';
+    return '${time.day}/${time.month}';
   }
 
   Future<void> _deleteComment(String commentId) async {
@@ -648,87 +725,73 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
         await supabase.from(likesTable).insert({
           'comment_id': comment.id,
           'user_id': userId,
-          'community_id': widget.post.communityId,
         });
         debugPrint('👍 Liked comment in $likesTable');
       }
     } catch (e) {
-      debugPrint('❌ Error toggling comment like: $e');
-      // Rollback on error
-      setState(() {
-        final index = _comments!.indexWhere((c) => c.id == comment.id);
-        if (index != -1) {
-          _comments![index] = comment.copyWith(
-            isLikedByCurrentUser: wasLiked,
-            likesCount: wasLiked ? comment.likesCount : comment.likesCount - 1,
-          );
-        }
-      });
+      // Revert optimistic update
+      if (mounted) {
+        setState(() {
+          final index = _comments!.indexWhere((c) => c.id == comment.id);
+          if (index != -1) {
+            _comments![index] = comment.copyWith(
+              isLikedByCurrentUser: wasLiked,
+              likesCount: comment.likesCount,
+            );
+          }
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   Widget _buildCommentContent(String content) {
-    // Regex to detect markdown image ![Imagen](url)
-    final imageRegex = RegExp(r'!\[Imagen\]\((.*?)\)');
-    final match = imageRegex.firstMatch(content);
-
-    if (match != null) {
+    // Basic Markdown support (for images mainly)
+    final imageRegex = RegExp(r'!\[.*?\]\((.*?)\)');
+    final hasImage = imageRegex.hasMatch(content);
+    
+    if (hasImage) {
+      final match = imageRegex.firstMatch(content)!;
       final imageUrl = match.group(1);
       final textContent = content.replaceAll(imageRegex, '').trim();
-
+      
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (imageUrl != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8.0),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    maxHeight: 250, // Limit height
-                    minWidth: double.infinity,
-                  ),
-                  child: Image.network(
-                    imageUrl,
-                    fit: BoxFit.cover,
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Container(
-                        height: 150,
-                        color: Colors.grey[900],
-                        child: const Center(
-                          child: CircularProgressIndicator(
-                             strokeWidth: 2,
-                             color: NeoColors.accent
-                          ),
-                        ),
-                      );
-                    },
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        height: 150,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[900],
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Center(
-                          child: Icon(Icons.broken_image, color: Colors.grey),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
-          
-          if (textContent.isNotEmpty)
+          if (textContent.isNotEmpty) ...[
             Text(
               textContent,
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 15,
                 height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+          if (imageUrl != null)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: CachedNetworkImage(
+                imageUrl: imageUrl,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: 200,
+                placeholder: (context, url) => Container(
+                  height: 200,
+                  color: Colors.grey[800],
+                  child: const Center(child: CircularProgressIndicator()),
+                ),
+                errorWidget: (context, url, error) => Container(
+                  height: 200,
+                  color: Colors.grey[800],
+                  child: const Center(child: Icon(Icons.error, color: Colors.red)),
+                ),
               ),
             ),
         ],

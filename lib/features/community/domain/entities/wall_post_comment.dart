@@ -81,5 +81,28 @@ class WallPostComment extends Equatable {
         likesCount,
         isLikedByCurrentUser,
       ];
+
+  factory WallPostComment.fromSupabase(Map<String, dynamic> json, String? currentUserId) {
+    // Author might be joined or passed directly
+    final author = json['author'] as Map<String, dynamic>?;
+    
+    // Check user likes
+    final userLikes = json['user_likes'] as List<dynamic>?;
+    final isLikedByMe = currentUserId != null &&
+        userLikes != null &&
+        userLikes.any((like) => like['user_id'] == currentUserId);
+
+    return WallPostComment(
+      id: json['id'] as String,
+      postId: json['post_id'] as String? ?? '', // Often not joined, but fallback
+      authorId: json['author_id'] as String,
+      authorName: author?['username'] as String? ?? 'Usuario',
+      authorAvatar: author?['avatar_global_url'] as String?,
+      content: json['content'] as String,
+      createdAt: DateTime.parse(json['created_at'] as String),
+      likesCount: json['likes_count'] as int? ?? 0,
+      isLikedByCurrentUser: isLikedByMe,
+    );
+  }
 }
 

@@ -598,7 +598,15 @@ class CommunityRepositoryImpl implements CommunityRepository {
           .select('''
             *,
             author:users_global!wall_posts_profile_user_id_fkey(username, avatar_global_url),
-            user_likes:wall_post_likes(user_id)
+            user_likes:wall_post_likes(user_id),
+            wall_post_comments(
+              id,
+              content,
+              created_at,
+              author_id,
+              author:users_global(username, avatar_global_url),
+              user_likes:wall_post_comment_likes(user_id)
+            )
           ''')
           .eq('community_id', communityId);
 
@@ -613,6 +621,8 @@ class CommunityRepositoryImpl implements CommunityRepository {
 
       // Execute query with ordering
       final response = await query
+          .order('created_at', referencedTable: 'wall_post_comments', ascending: true)
+          .limit(1, referencedTable: 'wall_post_comments')
           .order('created_at', ascending: false)
           .order('id', ascending: false)
           .limit(limit);

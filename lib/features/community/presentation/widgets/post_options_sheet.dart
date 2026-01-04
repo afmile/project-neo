@@ -4,21 +4,39 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// Shows a bottom sheet with post options
 ///
 /// Displays options: Share, Copy text, Block account, Report
-void showPostOptionsSheet(BuildContext context) {
+void showPostOptionsSheet(
+  BuildContext context, {
+  required String content,
+  bool showDelete = false,
+  VoidCallback? onDelete,
+}) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (context) => const _PostOptionsSheet(),
+    builder: (context) => _PostOptionsSheet(
+      content: content,
+      showDelete: showDelete,
+      onDelete: onDelete,
+    ),
   );
 }
 
 class _PostOptionsSheet extends StatelessWidget {
-  const _PostOptionsSheet();
+  final String content;
+  final bool showDelete;
+  final VoidCallback? onDelete;
+
+  const _PostOptionsSheet({
+    required this.content,
+    this.showDelete = false,
+    this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -100,9 +118,14 @@ class _PostOptionsSheet extends StatelessWidget {
             context: context,
             icon: Icons.content_copy,
             label: 'Copiar texto',
-            onTap: () {
-              Navigator.of(context).pop();
-              // TODO: Implement copy text functionality
+            onTap: () async {
+              await Clipboard.setData(ClipboardData(text: content));
+              if (context.mounted) {
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Texto copiado al portapapeles')),
+                );
+              }
             },
           ),
           
@@ -115,6 +138,19 @@ class _PostOptionsSheet extends StatelessWidget {
               // TODO: Implement block account functionality
             },
           ),
+          
+          // Delete item (if author)
+          if (showDelete && onDelete != null)
+            _buildMenuItem(
+              context: context,
+              icon: Icons.delete_outline,
+              label: 'Eliminar',
+              isDestructive: true,
+              onTap: () {
+                Navigator.of(context).pop();
+                onDelete!();
+              },
+            ),
           
           // Destructive item
           _buildMenuItem(

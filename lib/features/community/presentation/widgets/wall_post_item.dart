@@ -284,7 +284,7 @@ class WallPostItem extends StatelessWidget {
                 if (onMenuTap != null) {
                   onMenuTap!();
                 } else {
-                  showPostOptionsSheet(context);
+                  showPostOptionsSheet(context, content: post.content);
                 }
               },
               borderRadius: BorderRadius.circular(20),

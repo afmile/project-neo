@@ -29,11 +29,13 @@ import '../providers/community_members_provider.dart';
 import '../providers/wall_posts_paginated_provider.dart';
 import '../providers/home_vivo_providers.dart'; // NEW
 import '../providers/local_identity_providers.dart'; // Local identity provider
-import '../widgets/wall_post_item.dart';
+import '../widgets/bento_post_card.dart';
+import '../widgets/wall_threads_composer_sheet.dart';
 import '../widgets/sala_card.dart'; // NEW
 import '../widgets/post_list_tile.dart'; // NEW
 import '../widgets/identity_card.dart'; // NEW
 import 'community_studio_screen.dart';
+import 'wall_post_thread_screen.dart'; // For commenting on posts
 import '../../../chat/presentation/screens/chat_room_screen.dart'; // NEW
 import '../../../chat/domain/entities/community_chat_room_entity.dart'; // NEW
 import '../../../../core/beta/beta.dart'; // Beta feedback button
@@ -63,10 +65,8 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   int _currentNavIndex = 0; // Internal navigation index
   bool _isSearching = false; // Search mode toggle
   final _searchController = TextEditingController();
-  
-  // Wall post composer
-  final _wallPostController = TextEditingController();
-  bool _isPostingWall = false;
+
+  // Removed: Wall post composer (now using BentoPostComposer modal)
 
   // Removed: Dummy online users for facepile, now using real data
 
@@ -84,7 +84,6 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   void dispose() {
     _tabController.dispose();
     _searchController.dispose();
-    _wallPostController.dispose();
     super.dispose();
   }
 
@@ -1084,121 +1083,107 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
     );
   }
   
-  /// Build wall post composer widget
+  /// Build wall post composer widget - Button to open modal
   Widget _buildWallPostComposer() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: NeoColors.surface,
-        border: Border(
-          bottom: BorderSide(
-            color: NeoColors.border.withValues(alpha: 0.3),
+    final currentUser = ref.watch(currentUserProvider);
+    
+    if (currentUser == null) {
+      return const SizedBox.shrink();
+    }
+    
+    return InkWell(
+      onTap: () => _openComposerModal(),
+      child: Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: NeoColors.surface,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: NeoColors.border.withValues(alpha: 0.5),
             width: 1,
           ),
         ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _wallPostController,
-              maxLines: 3,
-              minLines: 1,
-              enabled: !_isPostingWall,
-              style: const TextStyle(color: Colors.white, fontSize: 14),
-              decoration: InputDecoration(
-                hintText: '¿Qué estás pensando?',
-                hintStyle: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.4),
-                  fontSize: 14,
-                ),
-                filled: true,
-                fillColor: NeoColors.background,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          SizedBox(
-            height: 44,
-            child: ElevatedButton(
-              onPressed: _isPostingWall ? null : _submitWallPost,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: NeoColors.accent,
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: NeoColors.accent.withValues(alpha: 0.5),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-              ),
-              child: _isPostingWall
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
+        child: Row(
+          children: [
+            // Avatar
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: NeoColors.accent.withValues(alpha: 0.15),
+              backgroundImage: currentUser.avatarUrl != null &&
+                      currentUser.avatarUrl!.isNotEmpty
+                  ? NetworkImage(currentUser.avatarUrl!)
+                  : null,
+              child: currentUser.avatarUrl == null ||
+                      currentUser.avatarUrl!.isEmpty
+                  ? Text(
+                      currentUser.username[0].toUpperCase(),
+                      style: const TextStyle(
+                        color: NeoColors.accent,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
                       ),
                     )
-                  : const Text('Publicar'),
+                  : null,
             ),
-          ),
-        ],
+            const SizedBox(width: 12),
+            // Placeholder text
+            Expanded(
+              child: Text(
+                '¿Qué estás pensando?',
+                style: TextStyle(
+                  color: Colors.grey[500],
+                  fontSize: 15,
+                ),
+              ),
+            ),
+            // Icon
+            Icon(
+              Icons.image_outlined,
+              color: Colors.grey[600],
+              size: 20,
+            ),
+          ],
+        ),
       ),
     );
   }
   
-  /// Submit wall post
-  Future<void> _submitWallPost() async {
-    final content = _wallPostController.text.trim();
-    if (content.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Escribe algo para publicar'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
+  /// Open composer modal
+  void _openComposerModal() {
+    final currentUser = ref.read(currentUserProvider);
     
-    setState(() => _isPostingWall = true);
+    if (currentUser == null) return;
     
-    final success = await ref
-        .read(wallPostsPaginatedProvider(widget.community.id).notifier)
-        .createPost(content);
-    
-    if (!mounted) return;
-    
-    setState(() => _isPostingWall = false);
-    
-    if (success) {
-      _wallPostController.clear();
-      FocusScope.of(context).unfocus();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('¡Publicado!'),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 1),
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Error al publicar. Inténtalo de nuevo.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => WallThreadsComposerSheet(
+        currentUser: currentUser,
+        profileUser: currentUser,
+        communityId: widget.community.id,
+        isSelfProfile: true,
+        onSuccess: () {
+          // Refresh wall posts after posting
+          ref
+              .read(wallPostsPaginatedProvider(widget.community.id).notifier)
+              .refresh();
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('¡Publicado!'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        },
+      ),
+    );
   }
+  
   
   /// Build wall posts feed
   Widget _buildWallPostsFeed() {
@@ -1313,7 +1298,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
               final post = paginated.posts[index];
               final currentUserId = ref.read(currentUserProvider)?.id;
 
-              return WallPostItem(
+              return BentoPostCard(
                 post: post,
                 onLike: () {
                   ref
@@ -1324,8 +1309,32 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                       )
                       .toggleLike(post.id);
                 },
-                onReply: null, // TODO: Implement comment/reply functionality
-                onMenuTap: post.authorId == currentUserId
+                onComment: () {
+                  // Navigate to thread screen with auto-focus on input
+                  // This is the same behavior as profile wall
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (ctx) => WallPostThreadScreen(
+                        post: post,
+                        autoFocusInput: true,
+                        isProfilePost: false, // Community wall uses wall_post_comments
+                      ),
+                    ),
+                  );
+                },
+                onTapComments: () {
+                  // Navigate to thread screen to view all comments
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (ctx) => WallPostThreadScreen(
+                        post: post,
+                        autoFocusInput: false,
+                        isProfilePost: false,
+                      ),
+                    ),
+                  );
+                },
+                onDelete: post.authorId == currentUserId
                     ? () async {
                         final deleted = await ref
                             .read(
