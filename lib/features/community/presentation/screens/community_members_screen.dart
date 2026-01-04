@@ -45,7 +45,7 @@ class _CommunityMembersScreenState extends ConsumerState<CommunityMembersScreen>
   }
 
   void _navigateToProfile(String userId) {
-    // Navigate to public profile (view only)
+    // Navigate to public profile (correct UI design)
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => PublicUserProfileScreen(
@@ -69,6 +69,7 @@ class _CommunityMembersScreenState extends ConsumerState<CommunityMembersScreen>
         ),
         bottom: TabBar(
           controller: _tabController,
+          dividerColor: Colors.transparent, // Remove white line
           indicatorColor: NeoColors.accent,
           labelColor: NeoColors.accent,
           unselectedLabelColor: Colors.grey,

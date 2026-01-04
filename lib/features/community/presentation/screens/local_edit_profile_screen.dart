@@ -134,9 +134,16 @@ class _LocalEditProfileScreenState extends ConsumerState<LocalEditProfileScreen>
             const SnackBar(
               content: Text('Identidad local actualizada'),
               backgroundColor: NeoColors.success,
+              duration: Duration(milliseconds: 1500),
             ),
           );
-          Navigator.of(context).pop();
+          
+          // Defer pop to avoid Navigator assertion
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              Navigator.of(context).pop();
+            }
+          });
         }
       } else {
         if (mounted) {

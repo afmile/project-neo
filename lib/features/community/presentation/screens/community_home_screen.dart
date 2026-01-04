@@ -18,6 +18,7 @@ import '../../../chat/presentation/screens/community_chats_screen.dart';
 import '../../../chat/presentation/widgets/chat_catalog_grid.dart';
 import '../../../chat/presentation/screens/create_chat_screen.dart';
 import 'community_user_profile_screen.dart';
+import 'public_user_profile_screen.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import 'community_members_screen.dart';
 import 'create_content_screen.dart';
@@ -28,7 +29,7 @@ import '../providers/community_members_provider.dart';
 import '../providers/wall_posts_paginated_provider.dart';
 import '../providers/home_vivo_providers.dart'; // NEW
 import '../providers/local_identity_providers.dart'; // Local identity provider
-import '../widgets/wall_post_card.dart';
+import '../widgets/wall_post_item.dart';
 import '../widgets/sala_card.dart'; // NEW
 import '../widgets/post_list_tile.dart'; // NEW
 import '../widgets/identity_card.dart'; // NEW
@@ -36,6 +37,7 @@ import 'community_studio_screen.dart';
 import '../../../chat/presentation/screens/chat_room_screen.dart'; // NEW
 import '../../../chat/domain/entities/community_chat_room_entity.dart'; // NEW
 import '../../../../core/beta/beta.dart'; // Beta feedback button
+import '../widgets/notification_bell_widget.dart'; // Notifications
 
 class CommunityHomeScreen extends ConsumerStatefulWidget {
   final CommunityEntity community;
@@ -96,7 +98,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
       body: Stack(
         children: [
           _buildBody(),
-          // Beta Feedback FAB - positioned at bottom-right
+          // Beta Feedback FAB - positioned at bottom-right (always visible)
           if (isMember && !keyboardVisible)
             Positioned(
               right: 16,
@@ -186,16 +188,6 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
         onPressed: () => Navigator.of(context).pop(),
       ),
       actions: [
-        // Neo Studio button for owners
-        if (_isOwner())
-          IconButton(
-            icon: Icon(
-              Icons.settings,
-              color: _parseColor(widget.community.theme.primaryColor),
-            ),
-            tooltip: 'Neo Studio',
-            onPressed: _navigateToStudio,
-          ),
         // Search icon - toggles search mode
         IconButton(
           icon: Icon(
@@ -211,53 +203,29 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
             });
           },
         ),
-        IconButton(
-          icon: const Icon(Icons.more_vert, color: Colors.white),
-          onPressed: () {
-            // Menu Options
-            showModalBottomSheet(
-              context: context,
-              backgroundColor: Colors.transparent,
-              builder: (context) => Container(
-                decoration: const BoxDecoration(
-                  color: NeoColors.card,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                ),
-                child: SafeArea(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ListTile(
-                        leading: const Icon(
-                          Icons.notifications_outlined,
-                          color: Colors.white,
-                        ),
-                        title: const Text(
-                          'Configuración',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                        onTap: () {
-                          Navigator.pop(context);
-                          context.pushNamed(
-                            'community-settings',
-                            pathParameters: {'id': widget.community.id},
-                            extra: {
-                              'name': widget.community.title,
-                              'color': _parseColor(
-                                widget.community.theme.primaryColor,
-                              ),
-                            },
-                          );
-                        },
-                      ),
-                      // More options can form here
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
+        // Notification bell
+        NotificationBellWidget(
+          communityId: widget.community.id,
+          iconColor: Colors.white,
         ),
+        // Settings (visible to all leaders, not just owners)
+        if (_isLeader())
+          IconButton(
+            icon: Icon(
+              Icons.settings,
+              color: _parseColor(widget.community.theme.primaryColor),
+            ),
+            tooltip: 'Configuración',
+            onPressed: () {
+              context.pushNamed(
+                'community-management',
+                pathParameters: {'id': widget.community.id},
+                extra: {
+                  'community': widget.community,
+                },
+              );
+            },
+          ),
       ],
       // Animated title - switches between title and search field
       title: AnimatedSwitcher(
@@ -1345,9 +1313,8 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
               final post = paginated.posts[index];
               final currentUserId = ref.read(currentUserProvider)?.id;
 
-              return WallPostCard(
+              return WallPostItem(
                 post: post,
-                canDelete: post.authorId == currentUserId,
                 onLike: () {
                   ref
                       .read(
@@ -1357,24 +1324,27 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
                       )
                       .toggleLike(post.id);
                 },
-                onDelete: () async {
-                  final deleted = await ref
-                      .read(
-                        wallPostsPaginatedProvider(
-                          widget.community.id,
-                        ).notifier,
-                      )
-                      .deletePost(post.id);
-                  
-                  if (deleted && mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Post eliminado'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  }
-                },
+                onReply: null, // TODO: Implement comment/reply functionality
+                onMenuTap: post.authorId == currentUserId
+                    ? () async {
+                        final deleted = await ref
+                            .read(
+                              wallPostsPaginatedProvider(
+                                widget.community.id,
+                              ).notifier,
+                            )
+                            .deletePost(post.id);
+                        
+                        if (deleted && mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Post eliminado'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        }
+                      }
+                    : null,
               );
             },
           ),
@@ -1987,8 +1957,8 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
     final currentUser = ref.watch(currentUserProvider);
     final userId = currentUser?.id ?? 'current_user_id'; // Fallback for demo
 
-    // Render the actual CommunityUserProfileScreen
-    return CommunityUserProfileScreen(
+    // Use PublicUserProfileScreen for consistent layout with other-profile view
+    return PublicUserProfileScreen(
       userId: userId,
       communityId: widget.community.id,
     );
@@ -2479,6 +2449,24 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   bool _isOwner() {
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
     return currentUserId != null && currentUserId == widget.community.ownerId;
+  }
+
+  /// Check if current user is a leader (owner, curator, or mod)
+  bool _isLeader() {
+    // Owner is always a leader
+    if (_isOwner()) return true;
+    
+    // Check role from local identity
+    final localIdentity = ref.read(myLocalIdentityProvider(widget.community.id));
+    return localIdentity.when(
+      data: (identity) {
+        if (identity == null) return false;
+        final role = identity.role?.toLowerCase() ?? '';
+        return role == 'leader' || role == 'curator' || role == 'mod';
+      },
+      loading: () => false,
+      error: (_, __) => false,
+    );
   }
 
   /// Navigate to Neo Studio (admin panel)

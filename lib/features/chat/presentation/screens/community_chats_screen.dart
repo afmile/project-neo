@@ -74,7 +74,33 @@ class _CommunityChatsScreenState extends ConsumerState<CommunityChatsScreen> {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      // FAB removed - accessed via central navbar button
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        elevation: 0,
+        title: const Text(
+          'Chats',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          IconButton(
+            onPressed: () {
+              setState(() {
+                _isSearching = !_isSearching;
+                if (!_isSearching) {
+                  _searchController.clear();
+                }
+              });
+              if (_isSearching) {
+                Future.delayed(const Duration(milliseconds: 100), () {
+                  _searchFocusNode.requestFocus();
+                });
+              }
+            },
+            icon: Icon(_isSearching ? Icons.close : Icons.search),
+            color: Colors.white,
+          ),
+        ],
+      ),
       body: GestureDetector(
         onTap: () {
           // Close search when tapping outside
@@ -86,7 +112,6 @@ class _CommunityChatsScreenState extends ConsumerState<CommunityChatsScreen> {
             _searchFocusNode.unfocus();
           }
         },
-        child: SafeArea(
         child: roomState.isLoading
             ? const Center(
                 child: CircularProgressIndicator(color: NeoColors.accent),
@@ -97,8 +122,67 @@ class _CommunityChatsScreenState extends ConsumerState<CommunityChatsScreen> {
                     ? _buildCompletelyEmptyState()
                     : Column(
                 children: [
-                  // Header
-                  _buildHeader(context),
+                  // Search field
+                  if (_isSearching)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Container(
+                        height: 48,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: NeoColors.card,
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.search_rounded,
+                              color: NeoColors.accent,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextField(
+                                controller: _searchController,
+                                focusNode: _searchFocusNode,
+                                style: const TextStyle(color: Colors.white, fontSize: 15),
+                                decoration: const InputDecoration(
+                                  hintText: 'Buscar salas...',
+                                  hintStyle: TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 15,
+                                  ),
+                                  border: InputBorder.none,
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                ),
+                                onChanged: (value) {
+                                  setState(() {}); // Trigger rebuild to filter rooms
+                                },
+                              ),
+                            ),
+                            if (_searchController.text.isNotEmpty)
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.clear,
+                                  color: Colors.white54,
+                                  size: 18,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _searchController.clear();
+                                  });
+                                },
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(
+                                  minWidth: 32,
+                                  minHeight: 32,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
                   
                   // Content
                   Expanded(
@@ -193,7 +277,6 @@ class _CommunityChatsScreenState extends ConsumerState<CommunityChatsScreen> {
                   ),
                 ],
               ),
-        ),
       ),
     );
   }
@@ -316,155 +399,6 @@ class _CommunityChatsScreenState extends ConsumerState<CommunityChatsScreen> {
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: NeoSpacing.md,
-        vertical: NeoSpacing.md,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.grey[900],
-        border: Border(
-          bottom: BorderSide(
-            color: Colors.white.withOpacity(0.1),
-            width: 1,
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          // Title - always visible
-          Text(
-            'Chats',
-            style: NeoTextStyles.headlineMedium.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          
-          const SizedBox(width: NeoSpacing.md),
-          
-          // Animated Search Pill - expands in available space
-          Expanded(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-              height: 48,
-              alignment: Alignment.centerRight,
-              child: _isSearching
-                  ? _buildSearchField()
-                  : _buildSearchButton(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSearchButton() {
-    return IconButton(
-      onPressed: () {
-        setState(() {
-          _isSearching = true;
-        });
-        // Auto-focus the search field
-        Future.delayed(const Duration(milliseconds: 350), () {
-          _searchFocusNode.requestFocus();
-        });
-      },
-      icon: const Icon(
-        Icons.search_rounded,
-        color: Colors.white,
-      ),
-      style: IconButton.styleFrom(
-        backgroundColor: NeoColors.card,
-        padding: const EdgeInsets.all(8),
-      ),
-    );
-  }
-
-  Widget _buildSearchField() {
-    return Row(
-      children: [
-        Expanded(
-          child: Container(
-            height: 48,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: NeoColors.card,
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.search_rounded,
-                  color: NeoColors.accent,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    focusNode: _searchFocusNode,
-                    style: const TextStyle(color: Colors.white, fontSize: 15),
-                    decoration: const InputDecoration(
-                      hintText: 'Buscar salas...',
-                      hintStyle: TextStyle(
-                        color: Colors.white54,
-                        fontSize: 15,
-                      ),
-                      border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    onChanged: (value) {
-                      setState(() {}); // Trigger rebuild to filter rooms
-                    },
-                  ),
-                ),
-                if (_searchController.text.isNotEmpty)
-                  IconButton(
-                    icon: const Icon(
-                      Icons.clear,
-                      color: Colors.white54,
-                      size: 18,
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _searchController.clear();
-                      });
-                    },
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 32,
-                      minHeight: 32,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        IconButton(
-          icon: const Icon(
-            Icons.close,
-            color: Colors.white,
-            size: 20,
-          ),
-          onPressed: () {
-            setState(() {
-              _isSearching = false;
-              _searchController.clear();
-            });
-            _searchFocusNode.unfocus();
-          },
-          padding: const EdgeInsets.all(8),
-          style: IconButton.styleFrom(
-            backgroundColor: NeoColors.card,
-          ),
-        ),
-      ],
-    );
-  }
 
   Widget _buildPinnedSection(
     BuildContext context,

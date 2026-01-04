@@ -154,22 +154,34 @@ class CommunityRepositoryImpl implements CommunityRepository {
         return const Left(AuthFailure('Usuario no autenticado'));
       }
 
-      // Get communities where user is owner or member
+      print('🔍 Fetching user communities for: $userId');
+
+      // Get communities where user is owner or member AND is_active = true
       final response = await _supabase
           .from('communities')
           .select('''
             *,
-            community_members!inner(user_id, role)
+            community_members!inner(user_id, role, is_active)
           ''')
           .eq('community_members.user_id', userId)
+          .eq('community_members.is_active', true)
           .order('created_at', ascending: false);
+
+      print('📦 Raw response: $response');
+      print('   Response length: ${(response as List).length}');
 
       final communities = (response as List)
           .map((json) => _communityFromJson(json))
           .toList();
 
+      print('✅ Parsed ${communities.length} communities');
+      for (final c in communities) {
+        print('   - ${c.title} (${c.id})');
+      }
+
       return Right(communities);
     } catch (e) {
+      print('❌ ERROR getUserCommunities: $e');
       return Left(ServerFailure('Error cargando comunidades: $e'));
     }
   }
