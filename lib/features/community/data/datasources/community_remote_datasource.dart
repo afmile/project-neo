@@ -67,11 +67,8 @@ class CommunityRemoteDataSourceImpl implements CommunityRemoteDataSource {
   }) async {
     try {
       final response = await _client
-          .from('community_posts')
-          .select('''
-            *,
-            author:author_id (username, avatar_global_url)
-          ''')
+          .from('community_posts_view')
+          .select()
           .eq('community_id', communityId)
           .order('is_pinned', ascending: false)
           .order('created_at', ascending: false)
@@ -91,11 +88,8 @@ class CommunityRemoteDataSourceImpl implements CommunityRemoteDataSource {
   Future<List<PostModel>> getPinnedPosts(String communityId) async {
     try {
       final response = await _client
-          .from('community_posts')
-          .select('''
-            *,
-            author:author_id (username, avatar_global_url)
-          ''')
+          .from('community_posts_view')
+          .select()
           .eq('community_id', communityId)
           .eq('is_pinned', true)
           .order('created_at', ascending: false);
