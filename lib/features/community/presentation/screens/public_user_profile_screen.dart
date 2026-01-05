@@ -25,6 +25,7 @@ import '../providers/community_follow_provider.dart';
 import '../providers/friendship_provider.dart';
 import '../widgets/profile_action_buttons.dart';
 import 'wall_post_thread_screen.dart';
+import '../providers/community_members_provider.dart';
 
 class PublicUserProfileScreen extends ConsumerStatefulWidget {
   final String userId;
@@ -934,25 +935,43 @@ class _PublicUserProfileScreenState
     final supabase = Supabase.instance.client;
     final currentUserId = supabase.auth.currentUser!.id;
     
-    // Fetch current user's local nickname and avatar for this community
-    String? localNickname;
-    String? localAvatarUrl;
+    // Fetch current user and profile user membership with global user fallback data
+    CommunityMember? localProfile;
+    CommunityMember? wallOwnerProfile;
     
     try {
-      final membership = await supabase
-          .from('community_members')
-          .select('nickname, avatar_url')
-          .eq('user_id', currentUserId)
-          .eq('community_id', widget.communityId)
-          .maybeSingle();
+      // Parallel fetch for both users with JOIN to users_global
+      // This matches the query structure expected by CommunityMember.fromJson
+      final results = await Future.wait([
+        // Current user (author)
+        supabase
+            .from('community_members')
+            .select('''
+              user_id, role, joined_at, nickname, avatar_url,
+              user:users_global(username, avatar_global_url)
+            ''')
+            .eq('user_id', currentUserId)
+            .eq('community_id', widget.communityId)
+            .maybeSingle(),
+        // Profile user (wall owner)
+        supabase
+            .from('community_members')
+            .select('''
+              user_id, role, joined_at, nickname, avatar_url,
+              user:users_global(username, avatar_global_url)
+            ''')
+            .eq('user_id', widget.userId)
+            .eq('community_id', widget.communityId)
+            .maybeSingle(),
+      ]);
       
-      if (membership != null) {
-        if (membership['nickname'] != null && membership['nickname'].toString().isNotEmpty) {
-          localNickname = membership['nickname'];
-        }
-        if (membership['avatar_url'] != null && membership['avatar_url'].toString().isNotEmpty) {
-          localAvatarUrl = membership['avatar_url'];
-        }
+      // Instantiate CommunityMember objects
+      if (results[0] != null) {
+        localProfile = CommunityMember.fromJson(results[0] as Map<String, dynamic>);
+      }
+      
+      if (results[1] != null) {
+        wallOwnerProfile = CommunityMember.fromJson(results[1] as Map<String, dynamic>);
       }
     } catch (e) {
       debugPrint('Error fetching local membership: $e');
@@ -978,8 +997,8 @@ class _PublicUserProfileScreenState
         profileUser: _user!,
         communityId: widget.communityId,
         isSelfProfile: currentUserId == widget.userId,
-        localNickname: localNickname,
-        localAvatarUrl: localAvatarUrl,
+        localProfile: localProfile,
+        wallOwnerProfile: wallOwnerProfile,
         onSuccess: () {
           _fetchUser();
         },

@@ -759,11 +759,13 @@ class CommunityRepositoryImpl implements CommunityRepository {
         return const Left(ValidationFailure('El contenido no puede estar vacío'));
       }
       
-      // Build insert payload (table has both profile_user_id and author_id)
+      // Build insert payload
+      // CRITICAL: profile_user_id must be NULL for community main wall posts
+      // Only profile_wall_posts table should have profile_user_id set
       final payload = {
         'community_id': communityId,
-        'profile_user_id': userId, // FK to users_global.id
-        'author_id': userId, // Legacy column, also NOT NULL
+        'profile_user_id': null, // ✅ NULL for community feed posts
+        'author_id': userId,
         'content': content.trim(),
       };
       
