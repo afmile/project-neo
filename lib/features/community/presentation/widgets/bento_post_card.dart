@@ -17,6 +17,9 @@ class BentoPostCard extends StatefulWidget {
   /// Optional first comment to display inline when expanded
   final WallPostComment? firstComment;
   
+  /// Community accent color for visual branding
+  final Color? accentColor;
+  
   /// Callbacks
   final VoidCallback? onLike;
   final VoidCallback? onComment;
@@ -34,6 +37,7 @@ class BentoPostCard extends StatefulWidget {
     super.key,
     required this.post,
     this.firstComment,
+    this.accentColor,
     this.onLike,
     this.onComment,
     this.onCommentLike,
@@ -48,6 +52,13 @@ class BentoPostCard extends StatefulWidget {
 }
 
 class _BentoPostCardState extends State<BentoPostCard> {
+  // Default accent color if none provided
+  Color get _accentColor {
+    final color = widget.accentColor ?? NeoColors.accent;
+    // 🎨 DEBUG: Log color usado (commented out after verification)
+    // print('🎨 BentoPostCard usando color: #${color.value.toRadixString(16)}');
+    return color;
+  }
 
 
   @override
@@ -60,27 +71,62 @@ class _BentoPostCardState extends State<BentoPostCard> {
       padding: widget.forceUnroundedBottom 
           ? const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 0.0)
           : const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A2633), // Dark Slate
-          borderRadius: widget.forceUnroundedBottom
-              ? const BorderRadius.vertical(top: Radius.circular(24.0))
-              : BorderRadius.circular(24.0),
-          border: Border(
-            top: BorderSide(color: Colors.white.withValues(alpha: 0.05), width: 0.5),
-            left: BorderSide(color: Colors.white.withValues(alpha: 0.05), width: 0.5),
-            right: BorderSide(color: Colors.white.withValues(alpha: 0.05), width: 0.5),
-            bottom: widget.forceUnroundedBottom 
-                ? BorderSide.none 
-                : BorderSide(color: Colors.white.withValues(alpha: 0.05), width: 0.5),
+      child: ClipRRect(
+        borderRadius: widget.forceUnroundedBottom
+            ? const BorderRadius.vertical(top: Radius.circular(16.0))
+            : BorderRadius.circular(16.0),
+        child: Container(
+          decoration: BoxDecoration(
+            // Background matching composer launcher
+            color: NeoColors.surface,
+            // Subtle border around the card
+            border: Border(
+              top: BorderSide(
+                color: NeoColors.border.withOpacity(0.5),
+                width: 1,
+              ),
+              left: BorderSide(
+                color: NeoColors.border.withOpacity(0.5),
+                width: 1,
+              ),
+              right: BorderSide(
+                color: NeoColors.border.withOpacity(0.5),
+                width: 1,
+              ),
+              bottom: widget.forceUnroundedBottom
+                  ? BorderSide.none
+                  : BorderSide(
+                      color: NeoColors.border.withOpacity(0.5),
+                      width: 1,
+                    ),
+            ),
+            borderRadius: widget.forceUnroundedBottom
+                ? const BorderRadius.vertical(top: Radius.circular(16.0))
+                : BorderRadius.circular(16.0),
           ),
-        ),
-        // We use a Column of Rows to achieve the layout while maintaining vertical alignment flexibility
-        child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Left accent border
+              Container(
+                width: 3,
+                decoration: BoxDecoration(
+                  color: _accentColor,
+                  borderRadius: widget.forceUnroundedBottom
+                      ? const BorderRadius.only(topLeft: Radius.circular(16.0))
+                      : const BorderRadius.only(
+                          topLeft: Radius.circular(16.0),
+                          bottomLeft: Radius.circular(16.0),
+                        ),
+                ),
+              ),
+              // Main content
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(17, 20, 20, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                 // 1. Parent Post Section (Avatar + Header + Content)
                 IntrinsicHeight(
                   child: Row(
@@ -94,15 +140,8 @@ class _BentoPostCardState extends State<BentoPostCard> {
                           children: [
                             // Thread Line (only if comment exists)
                             // Starts from center of avatar (20px) down to bottom
-                            if (hasComment)
-                              Positioned(
-                                top: 20,
-                                bottom: 0,
-                                child: Container(
-                                  width: 2,
-                                  color: Colors.white.withValues(alpha: 0.1),
-                                ),
-                              ),
+                            // Thread Line removed as per request
+                            // if (hasComment) Positioned(...) was here
                             
                             // Parent Avatar
                             _buildAvatar(),
@@ -135,14 +174,8 @@ class _BentoPostCardState extends State<BentoPostCard> {
                       // Left Rail: Thread Line
                       SizedBox(
                         width: 40,
-                        child: (hasComment || widget.forceUnroundedBottom) 
-                          ? Center(
-                              child: Container(
-                                width: 2,
-                                color: Colors.white.withValues(alpha: 0.1),
-                              ),
-                            )
-                          : null,
+                          // Thread line removed
+                          child: null,
                       ),
                       
                       const SizedBox(width: 12),
@@ -207,8 +240,12 @@ class _BentoPostCardState extends State<BentoPostCard> {
                      padding: const EdgeInsets.only(left: 52), // 40 + 12
                      child: _buildMoreCommentsLink(),
                    ),
-              ],
-            ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -356,7 +393,7 @@ class _BentoPostCardState extends State<BentoPostCard> {
                             : Icons.favorite_border,
                         color: widget.post.isLikedByCurrentUser
                             ? Colors.red[400]
-                            : Colors.grey[400],
+                            : _accentColor,
                         size: 20,
                       ),
                       if (widget.post.likes > 0) ...[
@@ -364,7 +401,9 @@ class _BentoPostCardState extends State<BentoPostCard> {
                         Text(
                           widget.post.likes.toString(),
                           style: TextStyle(
-                            color: Colors.grey[400],
+                            color: widget.post.isLikedByCurrentUser
+                                ? Colors.red[400]
+                                : _accentColor,
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
                           ),
@@ -386,16 +425,16 @@ class _BentoPostCardState extends State<BentoPostCard> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.chat_bubble_outline,
-                        color: Colors.grey,
+                        color: _accentColor,
                         size: 19,
                       ),
                       const SizedBox(width: 6),
                       Text(
                         widget.post.commentsCount.toString(),
                         style: TextStyle(
-                            color: Colors.grey[400],
+                            color: _accentColor,
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
                           ),

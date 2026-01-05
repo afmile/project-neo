@@ -92,7 +92,7 @@ class _CommunityPreviewScreenState
           children: [
             // Cover Image with Hero animation
             Hero(
-              tag: 'community_cover_${widget.community.id}',
+              tag: 'community_preview_cover_${widget.community.id}',
               child: Material(
                 type: MaterialType.transparency,
                 child: coverUrl != null

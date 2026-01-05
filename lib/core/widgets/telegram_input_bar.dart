@@ -89,8 +89,12 @@ class TelegramInputBar extends StatelessWidget {
               Expanded(
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.grey[900],
+                    color: NeoColors.surface, // Match BentoPostCard background
                     borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: NeoColors.border.withOpacity(0.5), // Match BentoPostCard border
+                      width: 1,
+                    ),
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                   child: Row(

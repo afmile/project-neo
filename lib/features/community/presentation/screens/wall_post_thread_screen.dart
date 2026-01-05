@@ -399,17 +399,18 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
                             return Container(
                               padding: const EdgeInsets.symmetric(horizontal: 20), // Match BentoPostCard inner padding
                               decoration: BoxDecoration(
-                                color: const Color(0xFF1A2633), // Match Bento Card
+                                // Match post card style
+                                color: NeoColors.surface,
                                 // Only round bottom if last
                                 borderRadius: isLast 
-                                    ? const BorderRadius.vertical(bottom: Radius.circular(24.0))
+                                    ? const BorderRadius.vertical(bottom: Radius.circular(16.0))
                                     : null,
-                                // Borders (sides + bottom if last)
+                                // Borders matching post card
                                 border: Border(
-                                  left: BorderSide(color: Colors.white.withValues(alpha: 0.05), width: 0.5),
-                                  right: BorderSide(color: Colors.white.withValues(alpha: 0.05), width: 0.5),
+                                  left: BorderSide(color: NeoColors.border.withOpacity(0.5), width: 1),
+                                  right: BorderSide(color: NeoColors.border.withOpacity(0.5), width: 1),
                                   bottom: isLast 
-                                      ? BorderSide(color: Colors.white.withValues(alpha: 0.05), width: 0.5)
+                                      ? BorderSide(color: NeoColors.border.withOpacity(0.5), width: 1)
                                       : BorderSide.none,
                                 ),
                               ),
@@ -468,15 +469,8 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
                   // Vertical Thread Line
                   // Extends from top. If last, stops at avatar center (20px). Else goes full height.
                   // But since parent line needs to connect, we start from top.
-                  Positioned(
-                    top: 0,
-                    bottom: isLast ? null : 0,
-                    height: isLast ? 24 : null, // Stop at approx center of avatar area
-                    child: Container(
-                      width: 2,
-                      color: Colors.white.withValues(alpha: 0.1),
-                    ),
-                  ),
+                  // Vertical Thread Line Removed as per user request
+                  // Positioned was here drawing the line
                   
                   // Avatar with spacing from top to align with text
                   Padding(
@@ -531,7 +525,7 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
             // Content Column
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.only(bottom: 24.0, top: 4.0),
+                padding: const EdgeInsets.only(bottom: 16.0, top: 4.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

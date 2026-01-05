@@ -1298,8 +1298,19 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
               final post = paginated.posts[index];
               final currentUserId = ref.read(currentUserProvider)?.id;
 
+              // 🎨 DEBUG: Accent Color (commented out after verification)
+              // print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+              // print('🎨 Community Title: ${widget.community.title}');
+              // print('🎨 Community ID: ${widget.community.id}');
+              // print('🎨 Theme object: ${widget.community.theme}');
+              // print('🎨 AccentColor RAW: ${widget.community.theme.accentColor}');
+              // print('🎨 AccentColor PARSED: ${_parseHexColor(widget.community.theme.accentColor)}');
+              // print('🎨 AccentColor HEX: ${_parseHexColor(widget.community.theme.accentColor).value.toRadixString(16)}');
+              // print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
               return BentoPostCard(
                 post: post,
+                accentColor: _parseHexColor(widget.community.theme.accentColor),
                 onLike: () {
                   ref
                       .read(
@@ -2727,4 +2738,39 @@ class _FeedbackModalWrapperState extends ConsumerState<_FeedbackModalWrapper> {
       currentRoute: widget.currentRoute,
     );
   }
+}
+
+/// Helper to parse hex color string to Color
+Color _parseHexColor(String? hexColor) {
+  if (hexColor == null || hexColor.isEmpty) {
+    // Fallback to default purple
+    return const Color(0xFF8B5CF6);
+  }
+  
+  // Clean the string
+  String hex = hexColor.trim().toUpperCase();
+  hex = hex.replaceAll('#', '');
+  hex = hex.replaceAll('0X', '');
+  hex = hex.replaceAll('0x', '');
+  
+  try {
+    // Case 1: RGB (6 chars) - add FF for alpha
+    if (hex.length == 6) {
+      return Color(int.parse('FF$hex', radix: 16));
+    } 
+    // Case 2: ARGB (8 chars)
+    else if (hex.length == 8) {
+      return Color(int.parse(hex, radix: 16));
+    }
+    // Case 3: RGB (3 chars) - expand (e.g., "F0A" -> "FF00AA")
+    else if (hex.length == 3) {
+      final expanded = hex.split('').map((c) => c + c).join();
+      return Color(int.parse('FF$expanded', radix: 16));
+    }
+  } catch (e) {
+    print('❌ Error parsing color "$hexColor": $e');
+  }
+  
+  // Fallback for invalid format
+  return const Color(0xFF8B5CF6);
 }
