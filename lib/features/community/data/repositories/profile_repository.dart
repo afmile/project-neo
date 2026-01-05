@@ -4,7 +4,9 @@ import '../../data/models/wall_post_model.dart';
 
 abstract class ProfileRepository {
   Future<List<WallPost>> getProfilePosts(String userId, String communityId);
+  Future<List<WallPost>> getGlobalProfilePosts(String userId);
   Future<void> createPost(String userId, String communityId, String content);
+  Future<void> createGlobalPost(String userId, String content);
   Future<void> deletePost(String postId);
   Future<void> toggleLike(String postId);
 }
@@ -36,6 +38,27 @@ class ProfileRepositoryImpl implements ProfileRepository {
   }
 
   @override
+  Future<List<WallPost>> getGlobalProfilePosts(String userId) async {
+    // Queries the main 'wall_posts' table but strict filtering for NULL community_id
+    // This separates Global Profile posts from Community Wall posts.
+    final response = await _client
+        .from('wall_posts')
+        .select('''
+          *,
+          author:users_global!wall_posts_profile_user_id_fkey(username, avatar_global_url),
+          user_likes:wall_post_likes(user_id)
+        ''')
+        .eq('profile_user_id', userId)
+        .isFilter('community_id', null)
+        .order('created_at', ascending: false);
+
+    return WallPostModel.listFromSupabase(
+      response as List,
+      _client.auth.currentUser?.id,
+    );
+  }
+
+  @override
   Future<void> createPost(String userId, String communityId, String content) async {
     final currentUser = _client.auth.currentUser;
     if (currentUser == null) throw Exception('No autenticado');
@@ -43,6 +66,20 @@ class ProfileRepositoryImpl implements ProfileRepository {
     await _client.from('profile_wall_posts').insert({
       'profile_user_id': userId,
       'community_id': communityId,
+      'author_id': currentUser.id,
+      'content': content.trim(),
+    });
+  }
+
+  @override
+  Future<void> createGlobalPost(String userId, String content) async {
+    final currentUser = _client.auth.currentUser;
+    if (currentUser == null) throw Exception('No autenticado');
+
+    // Insert into 'wall_posts' with NULL community_id
+    await _client.from('wall_posts').insert({
+      'profile_user_id': userId,
+      'community_id': null,
       'author_id': currentUser.id,
       'content': content.trim(),
     });

@@ -33,11 +33,15 @@ class WallPostComment extends Equatable {
   /// Whether the current user has liked this comment
   final bool isLikedByCurrentUser;
 
+  /// Author's display name (community nickname)
+  final String? authorDisplayName;
+
   const WallPostComment({
     required this.id,
     required this.postId,
     required this.authorId,
     required this.authorName,
+    this.authorDisplayName,
     this.authorAvatar,
     required this.content,
     required this.createdAt,
@@ -50,6 +54,7 @@ class WallPostComment extends Equatable {
     String? postId,
     String? authorId,
     String? authorName,
+    String? authorDisplayName,
     String? authorAvatar,
     String? content,
     DateTime? createdAt,
@@ -61,6 +66,7 @@ class WallPostComment extends Equatable {
       postId: postId ?? this.postId,
       authorId: authorId ?? this.authorId,
       authorName: authorName ?? this.authorName,
+      authorDisplayName: authorDisplayName ?? this.authorDisplayName,
       authorAvatar: authorAvatar ?? this.authorAvatar,
       content: content ?? this.content,
       createdAt: createdAt ?? this.createdAt,
@@ -75,6 +81,7 @@ class WallPostComment extends Equatable {
         postId,
         authorId,
         authorName,
+        authorDisplayName,
         authorAvatar,
         content,
         createdAt,
@@ -97,6 +104,7 @@ class WallPostComment extends Equatable {
       postId: json['post_id'] as String? ?? '', // Often not joined, but fallback
       authorId: json['author_id'] as String,
       authorName: author?['username'] as String? ?? 'Usuario',
+      authorDisplayName: author?['display_name'] as String?, // Injected manually in Repository
       authorAvatar: author?['avatar_global_url'] as String?,
       content: json['content'] as String,
       createdAt: DateTime.parse(json['created_at'] as String),

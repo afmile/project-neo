@@ -70,7 +70,7 @@ class CommunityFollowRepository {
     }
   }
 
-  /// Get list of followers with user data
+  /// Get list of followers with user data (using local nicknames)
   Future<List<Map<String, dynamic>>> getFollowersList({
     required String communityId,
     required String userId,
@@ -80,23 +80,50 @@ class CommunityFollowRepository {
     try {
       final response = await _supabase
           .from('community_follows')
-          .select('''
-            follower_id,
-            follower:users_global!community_follows_follower_id_fkey(username, avatar_global_url, bio)
-          ''')
+          .select('follower_id')
           .eq('community_id', communityId)
           .eq('followed_id', userId)
           .eq('is_active', true)
-          .range(offset, offset + limit - 1); // Pagination
+          .range(offset, offset + limit - 1);
 
-      return List<Map<String, dynamic>>.from(response);
+      final follows = response as List;
+      if (follows.isEmpty) return [];
+
+      // Collect all follower IDs
+      final followerIds = follows.map((f) => f['follower_id'] as String).toList();
+
+      // Fetch local profiles from community_members
+      final localProfiles = await _supabase
+          .from('community_members')
+          .select('user_id, nickname, avatar_url, bio')
+          .eq('community_id', communityId)
+          .inFilter('user_id', followerIds);
+
+      // Build result with local profile data
+      final profileMap = <String, Map<String, dynamic>>{};
+      for (final profile in localProfiles as List) {
+        profileMap[profile['user_id'] as String] = profile;
+      }
+
+      return follows.map((f) {
+        final followerId = f['follower_id'] as String;
+        final localProfile = profileMap[followerId];
+        return {
+          'follower_id': followerId,
+          'follower': {
+            'username': localProfile?['nickname'] ?? 'Usuario',
+            'avatar_global_url': localProfile?['avatar_url'],
+            'bio': localProfile?['bio'],
+          },
+        };
+      }).toList();
     } catch (e) {
       print('❌ ERROR getFollowersList: $e');
       return [];
     }
   }
 
-  /// Get list of following with user data
+  /// Get list of following with user data (using local nicknames)
   Future<List<Map<String, dynamic>>> getFollowingList({
     required String communityId,
     required String userId,
@@ -106,16 +133,43 @@ class CommunityFollowRepository {
     try {
       final response = await _supabase
           .from('community_follows')
-          .select('''
-            followed_id,
-            followed:users_global!community_follows_followed_id_fkey(username, avatar_global_url, bio)
-          ''')
+          .select('followed_id')
           .eq('community_id', communityId)
           .eq('follower_id', userId)
           .eq('is_active', true)
           .range(offset, offset + limit - 1);
 
-      return List<Map<String, dynamic>>.from(response);
+      final follows = response as List;
+      if (follows.isEmpty) return [];
+
+      // Collect all followed IDs
+      final followedIds = follows.map((f) => f['followed_id'] as String).toList();
+
+      // Fetch local profiles from community_members
+      final localProfiles = await _supabase
+          .from('community_members')
+          .select('user_id, nickname, avatar_url, bio')
+          .eq('community_id', communityId)
+          .inFilter('user_id', followedIds);
+
+      // Build result with local profile data
+      final profileMap = <String, Map<String, dynamic>>{};
+      for (final profile in localProfiles as List) {
+        profileMap[profile['user_id'] as String] = profile;
+      }
+
+      return follows.map((f) {
+        final followedId = f['followed_id'] as String;
+        final localProfile = profileMap[followedId];
+        return {
+          'followed_id': followedId,
+          'followed': {
+            'username': localProfile?['nickname'] ?? 'Usuario',
+            'avatar_global_url': localProfile?['avatar_url'],
+            'bio': localProfile?['bio'],
+          },
+        };
+      }).toList();
     } catch (e) {
       print('❌ ERROR getFollowingList: $e');
       return [];

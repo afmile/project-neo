@@ -637,11 +637,24 @@ class CommunityRepositoryImpl implements CommunityRepository {
       print('📦 Fetched ${posts.length} posts');
 
       // Extract IDs for batch fetching
+      // Extract IDs for batch fetching
       final postIds = posts.map((p) => p['id'] as String).toList();
-      final authorIds = posts
-          .map((p) => p['author_id'] as String)
-          .toSet()
-          .toList();
+      
+      // Collect ALL author IDs (posts + comments)
+      final allAuthorIds = <String>{};
+      
+      // 1. Post authors
+      for (final p in posts) {
+        allAuthorIds.add(p['author_id'] as String);
+        
+        // 2. Comment authors
+        final comments = p['wall_post_comments'] as List<dynamic>?;
+        if (comments != null) {
+          for (final c in comments) {
+            allAuthorIds.add(c['author_id'] as String);
+          }
+        }
+      }
 
       final commentsCounts = <String, int>{};
       final localProfiles = <String, Map<String, dynamic>>{};
@@ -662,14 +675,14 @@ class CommunityRepositoryImpl implements CommunityRepository {
             }
           }
         }),
-        // Fetch local profiles for authors in this community
+        // Fetch local profiles for ALL authors in this community
         Future(() async {
-          if (authorIds.isNotEmpty) {
+          if (allAuthorIds.isNotEmpty) {
             final profilesResponse = await _supabase
                 .from('community_members')
                 .select('user_id, nickname, avatar_url')
                 .eq('community_id', communityId)
-                .inFilter('user_id', authorIds);
+                .inFilter('user_id', allAuthorIds.toList());
 
             for (final profile in profilesResponse as List) {
               localProfiles[profile['user_id']] = profile;
@@ -682,23 +695,47 @@ class CommunityRepositoryImpl implements CommunityRepository {
       for (final post in posts) {
         post['comments_count'] = commentsCounts[post['id']] ?? 0;
 
+        // A. Inject for Main Post Author
         final authorId = post['author_id'];
-        final localProfile = localProfiles[authorId];
+        final pLocalProfile = localProfiles[authorId];
 
-        if (localProfile != null) {
+        if (pLocalProfile != null) {
           // Override global author data with local profile
           if (post['author'] == null) post['author'] = <String, dynamic>{};
 
-          if (localProfile['nickname'] != null) {
-            post['author']['username'] = localProfile['nickname'];
+          if (pLocalProfile['nickname'] != null) {
+            post['author']['display_name'] = pLocalProfile['nickname'];
           }
-          if (localProfile['avatar_url'] != null) {
-            post['author']['avatar_global_url'] = localProfile['avatar_url'];
+          if (pLocalProfile['avatar_url'] != null) {
+            post['author']['avatar_global_url'] = pLocalProfile['avatar_url'];
+          }
+        }
+        
+        // B. Inject for Comment Authors
+        final comments = post['wall_post_comments'] as List<dynamic>?;
+        if (comments != null) {
+          for (final comment in comments) {
+            final cAuthorId = comment['author_id'];
+            final cLocalProfile = localProfiles[cAuthorId];
+            
+            if (cLocalProfile != null) {
+              if (comment['author'] == null) comment['author'] = <String, dynamic>{};
+              
+              // Inject Display Name (Nickname)
+              if (cLocalProfile['nickname'] != null) {
+                comment['author']['display_name'] = cLocalProfile['nickname'];
+              }
+              
+              // Inject Avatar
+              if (cLocalProfile['avatar_url'] != null) {
+                comment['author']['avatar_global_url'] = cLocalProfile['avatar_url'];
+              }
+            }
           }
         }
       }
 
-      print('✅ Posts processed with local overrides');
+      print('✅ Posts processed with local overrides (including comments)');
       return Right(List<Map<String, dynamic>>.from(posts));
     } catch (e, stackTrace) {
       print('❌ Error fetching paginated wall posts: $e');

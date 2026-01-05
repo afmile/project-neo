@@ -17,6 +17,8 @@ class WallThreadsComposerSheet extends StatefulWidget {
   final String communityId;
   final bool isSelfProfile;
   final VoidCallback onSuccess;
+  final String? localNickname;
+  final String? localAvatarUrl;
 
   const WallThreadsComposerSheet({
     super.key,
@@ -25,6 +27,8 @@ class WallThreadsComposerSheet extends StatefulWidget {
     required this.communityId,
     required this.isSelfProfile,
     required this.onSuccess,
+    this.localNickname,
+    this.localAvatarUrl,
   });
 
   @override
@@ -239,9 +243,13 @@ class _WallThreadsComposerSheetState extends State<WallThreadsComposerSheet> {
   }
 
   Widget _buildAuthorInfo() {
+    // Use local nickname if available, otherwise fallback to global username
+    final displayName = widget.localNickname ?? widget.currentUser.username;
+    final avatarUrl = widget.localAvatarUrl ?? widget.currentUser.avatarUrl;
+    
     final contextText = widget.isSelfProfile
         ? 'Publicando en tu muro'
-        : 'Publicando en el muro de @${widget.profileUser.username}';
+        : 'Publicando en el muro de ${widget.profileUser.username}';
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -250,14 +258,12 @@ class _WallThreadsComposerSheetState extends State<WallThreadsComposerSheet> {
         CircleAvatar(
           radius: 18,
           backgroundColor: NeoColors.accent.withValues(alpha: 0.15),
-          backgroundImage: widget.currentUser.avatarUrl != null &&
-                  widget.currentUser.avatarUrl!.isNotEmpty
-              ? NetworkImage(widget.currentUser.avatarUrl!)
+          backgroundImage: avatarUrl != null && avatarUrl.isNotEmpty
+              ? NetworkImage(avatarUrl)
               : null,
-          child: widget.currentUser.avatarUrl == null ||
-                  widget.currentUser.avatarUrl!.isEmpty
+          child: avatarUrl == null || avatarUrl.isEmpty
               ? Text(
-                  widget.currentUser.username[0].toUpperCase(),
+                  displayName[0].toUpperCase(),
                   style: const TextStyle(
                     color: NeoColors.accent,
                     fontWeight: FontWeight.w600,
@@ -274,7 +280,7 @@ class _WallThreadsComposerSheetState extends State<WallThreadsComposerSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                widget.currentUser.username,
+                displayName,
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w600,

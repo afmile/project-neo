@@ -153,13 +153,13 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
       final commentsList = response as List<dynamic>;
       
       // Fetch local profiles for all comment authors
-      if (commentsList.isNotEmpty) {
+      if (commentsList.isNotEmpty && widget.post.communityId != null) {
         final authorIds = commentsList.map((c) => c['author_id'] as String).toSet().toList();
         
         final localProfiles = await supabase
             .from('community_members')
             .select('user_id, nickname, avatar_url')
-            .eq('community_id', widget.post.communityId)
+            .eq('community_id', widget.post.communityId!)
             .inFilter('user_id', authorIds);
         
         // Create lookup map
@@ -292,7 +292,9 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
       }
 
       // Invalidate feed provider to update comments_count in Home
-      ref.invalidate(wallPostsPaginatedProvider(widget.post.communityId));
+      if (widget.post.communityId != null) {
+        ref.invalidate(wallPostsPaginatedProvider(widget.post.communityId!));
+      }
       
     } catch (e) {
       debugPrint('Error sending comment: $e');
@@ -484,7 +486,8 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
                         MaterialPageRoute(
                           builder: (context) => PublicUserProfileScreen(
                             userId: comment.authorId,
-                            communityId: widget.post.communityId,
+                            // Fallback to empty string if global post (PublicUserProfile handles fallback to global)
+                            communityId: widget.post.communityId ?? '',
                           ),
                         ),
                       ),
@@ -670,7 +673,9 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
         await _fetchComments();
         
         // Invalidate Home feed provider to update comments_count
-        ref.invalidate(wallPostsPaginatedProvider(widget.post.communityId));
+        if (widget.post.communityId != null) {
+          ref.invalidate(wallPostsPaginatedProvider(widget.post.communityId!));
+        }
       }
     } catch (e) {
       debugPrint('Error deleting comment: $e');
@@ -725,6 +730,7 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
         await supabase.from(likesTable).insert({
           'comment_id': comment.id,
           'user_id': userId,
+          'community_id': widget.post.communityId,
         });
         debugPrint('👍 Liked comment in $likesTable');
       }

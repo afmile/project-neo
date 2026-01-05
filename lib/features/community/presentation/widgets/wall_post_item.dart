@@ -112,7 +112,7 @@ class WallPostItem extends StatelessWidget {
                           child: firstComment!.authorAvatar == null ||
                                   firstComment!.authorAvatar!.isEmpty
                               ? Text(
-                                  firstComment!.authorName[0].toUpperCase(),
+                                  (firstComment!.authorDisplayName ?? firstComment!.authorName)[0].toUpperCase(),
                                   style: const TextStyle(
                                     color: NeoColors.accent,
                                     fontWeight: FontWeight.w600,
@@ -179,14 +179,7 @@ class WallPostItem extends StatelessWidget {
                 fontSize: 16,
               ),
             ),
-            const SizedBox(width: 6),
-            // Verified badge (optional - you can add a field to WallPost)
-            const Icon(
-              Icons.verified,
-              color: Color(0xFF3B82F6), // Blue
-              size: 16,
-            ),
-            const SizedBox(width: 8),
+
             Text(
               _formatTime(post.timestamp),
               style: TextStyle(
@@ -304,15 +297,19 @@ class WallPostItem extends StatelessWidget {
   }
 
   /// Build the inline comment (Block B)
+  /// Build the inline comment (Block B)
   Widget _buildInlineComment(BuildContext context) {
     if (firstComment == null) return const SizedBox.shrink();
+    
+    // Prefer displayName (nickname), fallback to authorName (username)
+    final displayName = firstComment!.authorDisplayName ?? firstComment!.authorName;
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Small name
         Text(
-          firstComment!.authorName,
+          displayName,
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.w600,

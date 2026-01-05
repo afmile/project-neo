@@ -22,18 +22,43 @@ class FriendshipRepository {
     try {
       final response = await _supabase
           .from('friendship_requests')
-          .select('''
-            *,
-            requester:users_global!friendship_requests_requester_id_fkey(username, avatar_global_url)
-          ''')
+          .select('*')
           .eq('community_id', communityId)
           .eq('recipient_id', _currentUserId!)
           .eq('status', 'pending')
           .order('created_at', ascending: false);
 
-      return (response as List<dynamic>).map((json) {
-        final requester = json['requester'] as Map<String, dynamic>?;
-        return _fromJson(json, requesterData: requester);
+      final requests = response as List<dynamic>;
+      if (requests.isEmpty) return [];
+
+      // Collect all requester IDs
+      final requesterIds = requests.map((r) => r['requester_id'] as String).toSet();
+
+      // Fetch local profiles from community_members
+      final localProfiles = await _supabase
+          .from('community_members')
+          .select('user_id, nickname, avatar_url')
+          .eq('community_id', communityId)
+          .inFilter('user_id', requesterIds.toList());
+
+      // Build lookup map
+      final profileMap = <String, Map<String, dynamic>>{};
+      for (final profile in localProfiles as List) {
+        profileMap[profile['user_id'] as String] = profile;
+      }
+
+      return requests.map((json) {
+        final requesterId = json['requester_id'] as String;
+        final localProfile = profileMap[requesterId];
+        return _fromJson(
+          json,
+          requesterData: localProfile != null
+              ? {
+                  'username': localProfile['nickname'],
+                  'avatar_global_url': localProfile['avatar_url'],
+                }
+              : null,
+        );
       }).toList();
     } catch (e) {
       print('❌ ERROR getPendingRequests: $e');
@@ -46,19 +71,55 @@ class FriendshipRepository {
     try {
       final response = await _supabase
           .from('friendship_requests')
-          .select('''
-            *,
-            requester:users_global!friendship_requests_requester_id_fkey(username, avatar_global_url),
-            recipient:users_global!friendship_requests_recipient_id_fkey(username, avatar_global_url)
-          ''')
+          .select('*')
           .eq('community_id', communityId)
           .eq('status', 'accepted')
           .or('requester_id.eq.$userId,recipient_id.eq.$userId');
 
-      return (response as List<dynamic>).map((json) {
-        final requester = json['requester'] as Map<String, dynamic>?;
-        final recipient = json['recipient'] as Map<String, dynamic>?;
-        return _fromJson(json, requesterData: requester, recipientData: recipient);
+      final requests = response as List<dynamic>;
+      if (requests.isEmpty) return [];
+
+      // Collect all user IDs (both requesters and recipients)
+      final userIds = <String>{};
+      for (final r in requests) {
+        userIds.add(r['requester_id'] as String);
+        userIds.add(r['recipient_id'] as String);
+      }
+
+      // Fetch local profiles from community_members
+      final localProfiles = await _supabase
+          .from('community_members')
+          .select('user_id, nickname, avatar_url')
+          .eq('community_id', communityId)
+          .inFilter('user_id', userIds.toList());
+
+      // Build lookup map
+      final profileMap = <String, Map<String, dynamic>>{};
+      for (final profile in localProfiles as List) {
+        profileMap[profile['user_id'] as String] = profile;
+      }
+
+      return requests.map((json) {
+        final requesterId = json['requester_id'] as String;
+        final recipientId = json['recipient_id'] as String;
+        final requesterProfile = profileMap[requesterId];
+        final recipientProfile = profileMap[recipientId];
+        
+        return _fromJson(
+          json,
+          requesterData: requesterProfile != null
+              ? {
+                  'username': requesterProfile['nickname'],
+                  'avatar_global_url': requesterProfile['avatar_url'],
+                }
+              : null,
+          recipientData: recipientProfile != null
+              ? {
+                  'username': recipientProfile['nickname'],
+                  'avatar_global_url': recipientProfile['avatar_url'],
+                }
+              : null,
+        );
       }).toList();
     } catch (e) {
       print('❌ ERROR getFriends: $e');

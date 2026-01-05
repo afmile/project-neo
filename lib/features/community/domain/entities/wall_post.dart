@@ -22,12 +22,15 @@ class WallPost extends Equatable {
   /// Unique post ID
   final String id;
 
-  /// Community ID this post belongs to
-  final String communityId;
+  /// Community ID this post belongs to (null if global profile post)
+  final String? communityId;
   
   /// Author's user ID
   final String authorId;
   
+  /// Author's display name (nickname in community)
+  final String? authorDisplayName;
+
   /// Author's display name
   final String authorName;
   
@@ -60,9 +63,10 @@ class WallPost extends Equatable {
 
   const WallPost({
     required this.id,
-    required this.communityId,
+    this.communityId,
     required this.authorId,
     required this.authorName,
+    this.authorDisplayName,
     this.authorAvatar,
     required this.content,
     required this.timestamp,
@@ -79,6 +83,7 @@ class WallPost extends Equatable {
     String? communityId,
     String? authorId,
     String? authorName,
+    String? authorDisplayName,
     String? authorAvatar,
     String? content,
     DateTime? timestamp,
@@ -94,6 +99,7 @@ class WallPost extends Equatable {
       communityId: communityId ?? this.communityId,
       authorId: authorId ?? this.authorId,
       authorName: authorName ?? this.authorName,
+      authorDisplayName: authorDisplayName ?? this.authorDisplayName,
       authorAvatar: authorAvatar ?? this.authorAvatar,
       content: content ?? this.content,
       timestamp: timestamp ?? this.timestamp,
@@ -112,6 +118,7 @@ class WallPost extends Equatable {
         communityId,
         authorId,
         authorName,
+        authorDisplayName,
         authorAvatar,
         content,
         timestamp,

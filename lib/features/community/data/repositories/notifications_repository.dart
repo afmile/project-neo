@@ -19,7 +19,7 @@ class NotificationsRepository {
   // FETCH OPERATIONS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  /// Fetch notifications for current user in a community
+  /// Fetch notifications for current user in a community (using local nicknames)
   Future<List<CommunityNotification>> fetchNotifications({
     required String communityId,
     int limit = 50,
@@ -28,18 +28,47 @@ class NotificationsRepository {
     try {
       final response = await _supabase
           .from('community_notifications')
-          .select('''
-            *,
-            actor:users_global!community_notifications_actor_id_fkey(username, avatar_global_url)
-          ''')
+          .select('*')
           .eq('community_id', communityId)
           .eq('recipient_id', _currentUserId!)
           .order('created_at', ascending: false)
           .range(offset, offset + limit - 1);
 
-      return (response as List<dynamic>).map((json) {
-        final actor = json['actor'] as Map<String, dynamic>?;
-        return _fromJson(json, actorData: actor);
+      final notifications = response as List<dynamic>;
+      if (notifications.isEmpty) return [];
+
+      // Collect all actor IDs (exclude nulls)
+      final actorIds = notifications
+          .where((n) => n['actor_id'] != null)
+          .map((n) => n['actor_id'] as String)
+          .toSet();
+
+      // Fetch local profiles from community_members
+      Map<String, Map<String, dynamic>> profileMap = {};
+      if (actorIds.isNotEmpty) {
+        final localProfiles = await _supabase
+            .from('community_members')
+            .select('user_id, nickname, avatar_url')
+            .eq('community_id', communityId)
+            .inFilter('user_id', actorIds.toList());
+
+        for (final profile in localProfiles as List) {
+          profileMap[profile['user_id'] as String] = profile;
+        }
+      }
+
+      return notifications.map((json) {
+        final actorId = json['actor_id'] as String?;
+        final localProfile = actorId != null ? profileMap[actorId] : null;
+        return _fromJson(
+          json,
+          actorData: localProfile != null
+              ? {
+                  'username': localProfile['nickname'],
+                  'avatar_global_url': localProfile['avatar_url'],
+                }
+              : null,
+        );
       }).toList();
     } catch (e) {
       print('❌ ERROR fetchNotifications: $e');

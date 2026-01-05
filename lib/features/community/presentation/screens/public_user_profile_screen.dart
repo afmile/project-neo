@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../screens/community_users_list_screen.dart';
@@ -15,7 +16,7 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/entities/wall_post.dart';
 import '../../domain/entities/friendship_status.dart';
 import '../../data/models/wall_post_model.dart';
-import '../widgets/wall_post_item.dart';
+import '../widgets/bento_post_card.dart';
 import '../widgets/wall_threads_composer_launcher.dart';
 import '../widgets/wall_threads_composer_sheet.dart';
 import '../widgets/profile_header_widget.dart';
@@ -50,10 +51,8 @@ class _PublicUserProfileScreenState
   bool _isFollowing = false;
   late TabController _tabController;
 
-  // Friendship status implementation (Mocked for UI)
   FriendshipStatus _friendshipStatus = FriendshipStatus.notFollowing;
 
-  // Header data
   String? _staffRole;
   List<CommunityTitle> _titles = [];
   int _followersCount = 0;
@@ -106,11 +105,9 @@ class _PublicUserProfileScreenState
     final supabase = Supabase.instance.client;
 
     try {
-      // PHASE 1: IDENTIFICATION (Prioritize Local)
       Map<String, dynamic>? membershipResponse;
       Map<String, dynamic>? userResponse;
 
-      // Try Local Membership first
       try {
         membershipResponse = await supabase
             .from('community_members')
@@ -122,7 +119,6 @@ class _PublicUserProfileScreenState
         debugPrint('Error fetching membership: $e');
       }
 
-      // Try Global User second
       try {
         userResponse = await supabase
             .from('users_global')
@@ -133,26 +129,22 @@ class _PublicUserProfileScreenState
         debugPrint('Error fetching global user: $e');
       }
 
-      // If BOTH failed/missing, then truly not found
       if (membershipResponse == null && userResponse == null) {
         if (mounted) setState(() => _isLoading = false);
         return;
       }
 
-      // Construct Display Data
       String displayUsername = 'Usuario';
       String? displayAvatar;
       String displayBio = '';
       String role = 'member';
 
-      // 1. Defaults from Global
       if (userResponse != null) {
         displayUsername = userResponse['username'] ?? 'Usuario';
         displayAvatar = userResponse['avatar_global_url'];
         displayBio = userResponse['bio'] ?? '';
       }
 
-      // 2. Override with Local
       if (membershipResponse != null) {
         role = membershipResponse['role'] ?? 'member';
         if (membershipResponse['nickname'] != null && membershipResponse['nickname'].toString().isNotEmpty) {
@@ -188,15 +180,121 @@ class _PublicUserProfileScreenState
         });
       }
 
-      // PHASE 2: CONTENT (Profile Wall Posts - from profile_wall_posts table)
       try {
         final responses = await Future.wait<dynamic>([
            supabase.from('profile_wall_posts').count().eq('profile_user_id', widget.userId).eq('community_id', widget.communityId),
-           supabase.from('profile_wall_posts').select('*, author:users_global!profile_wall_posts_author_id_fkey(*), user_likes:profile_wall_post_likes(user_id)').eq('profile_user_id', widget.userId).eq('community_id', widget.communityId).order('created_at', ascending: false).limit(20),
+           supabase
+               .from('profile_wall_posts')
+               .select('''
+                 *, 
+                 author:users_global!profile_wall_posts_author_id_fkey(*), 
+                 user_likes:profile_wall_post_likes(user_id),
+                 profile_wall_post_comments(
+                   id,
+                   content,
+                   created_at,
+                   author_id,
+                   author:users_global(username, avatar_global_url),
+                   user_likes:profile_wall_post_comment_likes(user_id)
+                 )
+               ''')
+               .eq('profile_user_id', widget.userId)
+               .eq('community_id', widget.communityId)
+               .order('created_at', referencedTable: 'profile_wall_post_comments', ascending: true)
+               .limit(1, referencedTable: 'profile_wall_post_comments')
+               .order('created_at', ascending: false)
+               .limit(20),
         ]);
         
         final countResponse = responses[0] as int;
         final postsResponse = responses[1] as List;
+
+        // Fetch comment counts for all posts
+        if (postsResponse.isNotEmpty) {
+          final postIds = postsResponse.map((p) => p['id'] as String).toList();
+          final commentsResponse = await supabase
+              .from('profile_wall_post_comments')
+              .select('post_id')
+              .inFilter('post_id', postIds);
+
+          // Count comments per post
+          final commentsCounts = <String, int>{};
+          for (final comment in commentsResponse as List) {
+            final postId = comment['post_id'] as String;
+            commentsCounts[postId] = (commentsCounts[postId] ?? 0) + 1;
+          }
+
+          // Inject comment counts into posts
+          for (final post in postsResponse) {
+            post['comments_count'] = commentsCounts[post['id']] ?? 0;
+          }
+        }
+
+        // Collect all author IDs (posts + comments) for local profile lookup
+        final allAuthorIds = <String>{};
+        
+        // Post authors
+        for (final post in postsResponse) {
+          allAuthorIds.add(post['author_id'] as String);
+          
+          // Comment authors
+          final comments = post['profile_wall_post_comments'] as List?;
+          if (comments != null) {
+            for (final comment in comments) {
+              allAuthorIds.add(comment['author_id'] as String);
+            }
+          }
+        }
+
+        // Fetch local profiles for all authors
+        final localProfiles = <String, Map<String, dynamic>>{};
+        if (allAuthorIds.isNotEmpty) {
+          final profilesResponse = await supabase
+              .from('community_members')
+              .select('user_id, nickname, avatar_url')
+              .eq('community_id', widget.communityId)
+              .inFilter('user_id', allAuthorIds.toList());
+
+          for (final profile in profilesResponse as List) {
+            localProfiles[profile['user_id']] = profile;
+          }
+        }
+
+        // Inject local profile data into posts and comments
+        for (final post in postsResponse) {
+          // Post author
+          final postAuthorId = post['author_id'] as String;
+          final postLocalProfile = localProfiles[postAuthorId];
+          
+          if (postLocalProfile != null) {
+            if (post['author'] == null) post['author'] = <String, dynamic>{};
+            if (postLocalProfile['nickname'] != null) {
+              post['author']['display_name'] = postLocalProfile['nickname'];
+            }
+            if (postLocalProfile['avatar_url'] != null) {
+              post['author']['avatar_global_url'] = postLocalProfile['avatar_url'];
+            }
+          }
+
+          // Comment authors
+          final comments = post['profile_wall_post_comments'] as List?;
+          if (comments != null) {
+            for (final comment in comments) {
+              final commentAuthorId = comment['author_id'] as String;
+              final commentLocalProfile = localProfiles[commentAuthorId];
+              
+              if (commentLocalProfile != null) {
+                if (comment['author'] == null) comment['author'] = <String, dynamic>{};
+                if (commentLocalProfile['nickname'] != null) {
+                  comment['author']['display_name'] = commentLocalProfile['nickname'];
+                }
+                if (commentLocalProfile['avatar_url'] != null) {
+                  comment['author']['avatar_global_url'] = commentLocalProfile['avatar_url'];
+                }
+              }
+            }
+          }
+        }
         
         final currentUser = ref.read(authProvider).user;
         final postsBuilder = WallPostModel.listFromSupabase(
@@ -216,7 +314,6 @@ class _PublicUserProfileScreenState
         if (mounted) setState(() => _isLoading = false);
       }
 
-      // Load header data (roles, titles, stats)
       await _loadHeaderData();
 
     } catch (e) {
@@ -229,12 +326,7 @@ class _PublicUserProfileScreenState
     }
   }
 
-  /// Loads profile header data: staff role, titles, follower/following counts
   Future<void> _loadHeaderData() async {
-    debugPrint('🔍 DEBUG: Iniciando carga de header data');
-    debugPrint('   User ID: ${widget.userId}');
-    debugPrint('   Community ID: ${widget.communityId}');
-
     try {
       final response = await Supabase.instance.client.rpc(
         'get_profile_header_data',
@@ -244,13 +336,10 @@ class _PublicUserProfileScreenState
         },
       );
 
-      debugPrint('✅ DEBUG: Response recibida: $response');
-
       if (response != null && mounted) {
         setState(() {
           _staffRole = response['staff_role'] as String?;
 
-          // Parse titles
           final titlesJson = response['titles'] as List?;
           if (titlesJson != null) {
             _titles = titlesJson
@@ -260,17 +349,10 @@ class _PublicUserProfileScreenState
 
           _followersCount = response['followers_count'] as int? ?? 0;
           _followingCount = response['following_count'] as int? ?? 0;
-
-          debugPrint('📊 DEBUG: Staff role = $_staffRole');
-          debugPrint('📊 DEBUG: Titles = ${_titles.length}');
-          debugPrint('📊 DEBUG: Followers = $_followersCount, Following = $_followingCount');
         });
-      } else {
-        debugPrint('⚠️ DEBUG: Response es null o widget no montado');
       }
     } catch (e) {
-      debugPrint('❌ DEBUG ERROR loading header data: $e');
-      // Non-critical error, don't update loading state
+      debugPrint('Error loading header data: $e');
     }
   }
 
@@ -283,7 +365,6 @@ class _PublicUserProfileScreenState
     );
 
     if (success) {
-      // Invalidate provider and update local state
       ref.invalidate(followStatusProvider(FollowStatusParams(
         communityId: widget.communityId,
         targetUserId: widget.userId,
@@ -302,13 +383,11 @@ class _PublicUserProfileScreenState
     try {
       final request = await repo.sendRequest(widget.communityId, widget.userId);
       if (request != null && mounted) {
-        // Refresh provider to update UI (remove 🤝 button, etc.)
         ref.invalidate(friendshipStatusProvider(FriendshipCheckParams(
           communityId: widget.communityId,
           otherUserId: widget.userId,
         )));
         
-        // Refresh pending requests provider just in case
         ref.invalidate(pendingFriendshipRequestsProvider(widget.communityId));
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -328,29 +407,6 @@ class _PublicUserProfileScreenState
       }
     } catch (e) {
       debugPrint('Error handling friendship request: $e');
-    }
-  }
-
-  Future<void> _handleRemoveFriendship() async {
-    final repo = ref.read(friendshipRepositoryProvider);
-    try {
-      final success = await repo.removeFriendship(widget.communityId, widget.userId);
-      if (success && mounted) {
-        // Refresh provider to update UI
-        ref.invalidate(friendshipStatusProvider(FriendshipCheckParams(
-          communityId: widget.communityId,
-          otherUserId: widget.userId,
-        )));
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Amistad anulada'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('Error removing friendship: $e');
     }
   }
 
@@ -378,22 +434,6 @@ class _PublicUserProfileScreenState
       isOwnProfile = true;
     }
 
-    // DEBUG LOGGING - Check Mutual Follow Status
-    if (!isOwnProfile) {
-      final friendshipState = ref.watch(friendshipStatusProvider(
-        FriendshipCheckParams(communityId: widget.communityId, otherUserId: widget.userId)
-      ));
-      
-      friendshipState.when(
-        data: (status) {
-          debugPrint('🔍 DEBUG FRIENDSHIP: Mutual=${status.haveMutualFollow} | Friends=${status.areFriends} | Pending=${status.pendingRequest != null}');
-        },
-        error: (e, s) => debugPrint('❌ DEBUG FRIENDSHIP ERROR: $e'),
-        loading: () => debugPrint('⏳ DEBUG FRIENDSHIP LOADING'),
-      );
-    }
-
-    // 1. Handle Loading
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: Colors.black,
@@ -403,58 +443,56 @@ class _PublicUserProfileScreenState
       );
     }
 
-    // 2. Handle Error
     if (_user == null) {
       return Scaffold(
         backgroundColor: Colors.black,
         body: _buildErrorState(),
       );
     }
-    
-
 
     return Scaffold(
       backgroundColor: Colors.black,
       body: CustomScrollView(
         slivers: [
-          // Header with avatar, name, tags, stats
-          _buildHeader(_user!, isOwnProfile),
+          SliverToBoxAdapter(
+            child: _buildNewHeader(_user!, isOwnProfile),
+          ),
           
-          // Tabs (Sticky)
           _buildTabBar(),
           
-          // Tab content
-          SliverFillRemaining(
+           SliverFillRemaining(
             child: TabBarView(
               controller: _tabController,
               children: [
                 _buildWallTab(),
-                _buildActivityTab(), // Placeholder for now
+                _buildActivityTab(), 
               ],
             ),
           ),
         ],
       ),
+      floatingActionButton: !isOwnProfile ? FloatingActionButton(
+        onPressed: _handleMessage,
+        backgroundColor: NeoColors.accent,
+        child: const Icon(Icons.chat_bubble_outline, color: Colors.white),
+      ) : null,
     );
   }
 
   Widget _buildErrorState() {
     return Center(
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.person_off, size: 64, color: Colors.grey),
+          const Icon(Icons.error_outline, color: Colors.grey, size: 64),
           const SizedBox(height: 16),
-          Text(
+          const Text(
             'Usuario no encontrado',
-            style: NeoTextStyles.headlineSmall.copyWith(color: Colors.white),
+            style: TextStyle(color: Colors.white, fontSize: 18),
           ),
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: NeoColors.accent,
-            ),
             child: const Text('Volver'),
           ),
         ],
@@ -462,190 +500,234 @@ class _PublicUserProfileScreenState
     );
   }
 
-  Widget _buildHeader(UserEntity user, bool isOwnProfile) {
-    // DEBUG: Log header data
-    debugPrint('🎨 RENDERING Header:');
-    debugPrint('   User: ${user.username}');
-    debugPrint('   Is self: $isOwnProfile');
-    debugPrint('   Staff role: $_staffRole');
-    debugPrint('   Titles count: ${_titles.length}');
-    debugPrint('   Followers: $_followersCount, Following: $_followingCount');
-
-    return SliverToBoxAdapter(
-      child: Column(
-        children: [
-          // Top bar: Back Button + NeoCoins (SafeArea)
-          Container(
-            padding: EdgeInsets.only(
-              top: MediaQuery.of(context).padding.top + 8,
-              left: 8,
-              right: 8,
-            ),
-            color: Colors.black,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Left Side: Back Button
-                IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Colors.white),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-
-                // Right Side: NeoCoins widget
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
+  Widget _buildNewHeader(UserEntity user, bool isOwnProfile) {
+    return Column(
+      children: [
+        Padding(
+          padding: EdgeInsets.only(
+            top: MediaQuery.of(context).padding.top + 8,
+            left: 16,
+            right: 16,
+            bottom: 16,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              InkWell(
+                onTap: () => Navigator.of(context).pop(),
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: const Color(0xFFFFD700).withValues(alpha: 0.3),
-                      width: 1,
+                    color: Colors.white.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
+                ),
+              ),
+
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3F2E00),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: const Color(0xFFCA8A04).withValues(alpha: 0.5),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.monetization_on, color: Color(0xFFEAB308), size: 16),
+                        const SizedBox(width: 6),
+                        Text(
+                          user.neocoinsBalance.toInt().toString(),
+                          style: const TextStyle(
+                            color: Color(0xFFEAB308),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        '🪙',
-                        style: TextStyle(fontSize: 16),
+                  const SizedBox(width: 12),
+                  InkWell(
+                    onTap: () => isOwnProfile ? _showProfileMenu(context) : null,
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${user.neocoinsBalance.toInt()}',
-                        style: const TextStyle(
-                          color: Color(0xFFFFD700),
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
+                      child: const Icon(Icons.more_vert, color: Colors.white, size: 24),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: NeoColors.accent.withValues(alpha: 0.4),
+              ),
+            ).animate(onPlay: (controller) => controller.repeat(reverse: true))
+             .scale(begin: const Offset(1, 1), end: const Offset(1.1, 1.1), duration: 2000.ms)
+             .then()
+             .scale(begin: const Offset(1.1, 1.1), end: const Offset(1, 1), duration: 2000.ms),
+            
+            Container(
+              width: 112,
+              height: 112,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: NeoColors.accent, width: 4),
+                boxShadow: [
+                   BoxShadow(
+                     color: NeoColors.accent.withValues(alpha: 0.5),
+                     blurRadius: 20,
+                     spreadRadius: 0,
+                   )
+                ],
+              ),
+              child: ClipOval(
+                child: user.avatarUrl != null
+                    ? Image.network(
+                        user.avatarUrl!,
+                        fit: BoxFit.cover,
+                      )
+                    : Container(
+                        color: const Color(0xFF1F2937),
+                        child: Center(
+                          child: Text(
+                            user.username[0].toUpperCase(),
+                            style: const TextStyle(
+                              fontSize: 40,
+                              color: NeoColors.accent,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ),
-                    ],
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 16),
+
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+             Text(
+               user.username,
+               style: const TextStyle(
+                 color: Colors.white,
+                 fontSize: 24,
+                 fontWeight: FontWeight.bold,
+                 letterSpacing: -0.5,
+               ),
+             ),
+             const SizedBox(width: 8),
+             Container(
+               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+               decoration: BoxDecoration(
+                 color: const Color(0xFF312E81).withValues(alpha: 0.6),
+                 borderRadius: BorderRadius.circular(4),
+                 border: Border.all(
+                   color: const Color(0xFF4338CA).withValues(alpha: 0.5),
+                 ),
+               ),
+               child: const Text(
+                 'Nv 5',
+                 style: TextStyle(
+                   color: Color(0xFFA5B4FC),
+                   fontSize: 12,
+                   fontWeight: FontWeight.w600,
+                 ),
+               ),
+             ),
+          ],
+        ),
+
+        const SizedBox(height: 12),
+
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _buildStatText(_followersCount, 'Seguidores', onTap: () => _navigateToConnections(initialTab: 0)),
+            const SizedBox(width: 24),
+            _buildStatText(_followingCount, 'Siguiendo', onTap: () => _navigateToConnections(initialTab: 1)),
+          ],
+        ),
+
+        if (!isOwnProfile)
+          Padding(
+            padding: const EdgeInsets.only(top: 24, left: 16, right: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _handleFollow,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _isFollowing ? Colors.transparent : NeoColors.accent,
+                      foregroundColor: _isFollowing ? Colors.white : Colors.white,
+                      elevation: 0,
+                      side: _isFollowing ? const BorderSide(color: Colors.grey) : null,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: Text(_isFollowing ? 'Siguiendo' : 'Seguir'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _handleRequestFriendship,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text('Añadir amigo'),
                   ),
                 ),
               ],
             ),
           ),
-
-          // ProfileHeaderWidget - The new unified header
-          ProfileHeaderWidget(
-            profileUser: user,
-            isSelfProfile: isOwnProfile,
-            followersCount: _followersCount,
-            followingCount: _followingCount,
-            staffRole: _staffRole,
-            titles: _titles,
-            onFollowTap: isOwnProfile ? null : _handleFollow,
-            onMessageTap: isOwnProfile ? null : _handleMessage,
-            onMenuTap: () => _showProfileMenu(context),
-            onFollowersTap: () => _navigateToConnections(initialTab: 0),
-            onFollowingTap: () => _navigateToConnections(initialTab: 1),
-          ),
-
-          // Action Buttons (below header for other profiles)
-          if (!isOwnProfile)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: ProfileActionButtons(
-                isOwnProfile: isOwnProfile,
-                otherUserId: widget.userId,
-                communityId: widget.communityId,
-                isFollowing: _isFollowing,
-                onFollowTap: _handleFollow,
-                onMessageTap: _handleMessage,
-                onRequestFriendshipConfirmed: _handleRequestFriendship,
-                onUnfriendConfirmed: _handleRemoveFriendship,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStats() {
-    final followersAsync = ref.watch(communityFollowerCountProvider(FollowStatusParams(
-      communityId: widget.communityId,
-      targetUserId: widget.userId,
-    )));
-
-    final followingAsync = ref.watch(communityFollowingCountProvider(FollowStatusParams(
-      communityId: widget.communityId,
-      targetUserId: widget.userId,
-    )));
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _buildStatItem(
-          'Seguidores', 
-          followersAsync.when(
-            data: (count) => count.toString(),
-            loading: () => '...',
-            error: (_, __) => '0',
-          ),
-          onTap: () {
-            context.pushNamed(
-              'community-connections',
-              pathParameters: {'communityId': widget.communityId},
-              extra: {
-                'userId': widget.userId,
-                'initialType': UserListType.followers,
-              },
-            );
-          },
-        ),
-        const SizedBox(width: 24),
-        Container(width: 1, height: 24, color: Colors.white24),
-        const SizedBox(width: 24),
-        _buildStatItem(
-          'Siguiendo', 
-          followingAsync.when(
-            data: (count) => count.toString(),
-            loading: () => '...',
-            error: (_, __) => '0',
-          ),
-          onTap: () {
-             context.pushNamed(
-              'community-connections',
-              pathParameters: {'communityId': widget.communityId},
-              extra: {
-                'userId': widget.userId,
-                'initialType': UserListType.following,
-              },
-            );
-          },
-        ),
-        const SizedBox(width: 24),
-        Container(width: 1, height: 24, color: Colors.white24),
-        const SizedBox(width: 24),
-        _buildStatItem('Posts', _postsCount.toString()),
+          
+        const SizedBox(height: 16),
       ],
     );
   }
 
-  Widget _buildStatItem(String label, String value, {VoidCallback? onTap}) {
+  Widget _buildStatText(int count, String label, {VoidCallback? onTap}) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        child: Column(
+       child: RichText(
+        text: TextSpan(
+          style: const TextStyle(fontSize: 14, color: Color(0xFF9CA3AF)),
           children: [
-            Text(
-              '$value',
-              style: NeoTextStyles.bodyLarge.copyWith(
+            TextSpan(
+              text: '$count ',
+              style: const TextStyle(
+                color: Colors.white,
                 fontWeight: FontWeight.bold,
-                color: NeoColors.accent,
               ),
             ),
-            Text(
-              label,
-              style: NeoTextStyles.bodySmall.copyWith(
-                color: NeoColors.textSecondary,
-                fontSize: 11,
-              ),
-            ),
+            TextSpan(text: label),
           ],
         ),
       ),
@@ -658,14 +740,15 @@ class _PublicUserProfileScreenState
       delegate: _SliverTabBarDelegate(
         TabBar(
           controller: _tabController,
-          dividerColor: Colors.transparent, // Remove divider
+          dividerColor: const Color(0xFF1F2937),
           indicatorColor: NeoColors.accent,
-          indicatorWeight: 3,
+          indicatorWeight: 2,
+          indicatorSize: TabBarIndicatorSize.tab,
           labelColor: NeoColors.accent,
-          unselectedLabelColor: NeoColors.textSecondary,
+          unselectedLabelColor: const Color(0xFF9CA3AF),
           labelStyle: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
           ),
           tabs: const [
             Tab(text: 'Muro'),
@@ -676,7 +759,234 @@ class _PublicUserProfileScreenState
     );
   }
 
-  /// Show profile menu for self-profile with configuration options
+  Widget _buildWallTab() {
+    bool isOwnProfile = false;
+    final currentUser = ref.watch(authProvider).user;
+    if (currentUser != null && currentUser.id == widget.userId) {
+      isOwnProfile = true;
+    }
+
+    return CustomScrollView(
+      slivers: [
+        if (isOwnProfile)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              child: Row(
+                children: [
+                   Container(
+                     width: 40,
+                     height: 40,
+                     decoration: const BoxDecoration(
+                       color: NeoColors.accent,
+                       shape: BoxShape.circle,
+                     ),
+                     alignment: Alignment.center,
+                     child: Text(
+                       _user?.username[0].toUpperCase() ?? 'A',
+                       style: const TextStyle(
+                         color: Colors.white,
+                         fontWeight: FontWeight.bold,
+                       ),
+                     ),
+                   ),
+                   const SizedBox(width: 12),
+                   Expanded(
+                     child: InkWell(
+                       onTap: _showComposerSheet,
+                       child: Text(
+                         '¿Qué novedades tienes?',
+                         style: TextStyle(
+                           color: Colors.grey[500],
+                           fontSize: 16,
+                         ),
+                       ),
+                     ),
+                   ),
+                ],
+              ),
+            ),
+          ),
+          
+         _isLoading
+             ? const SliverFillRemaining(
+                 child: Center(child: CircularProgressIndicator()),
+               )
+             : _wallPosts.isEmpty
+                 ? const SliverToBoxAdapter(
+                     child: Padding(
+                       padding: EdgeInsets.all(32.0),
+                       child: Center(
+                         child: Text(
+                           'Aún no hay publicaciones',
+                           style: TextStyle(color: Colors.white54),
+                         ),
+                       ),
+                     ),
+                   )
+                 : SliverList(
+                     delegate: SliverChildBuilderDelegate(
+                       (context, index) {
+                         final post = _wallPosts[index];
+                         return BentoPostCard(
+                            post: post,
+                            onLike: () => _togglePostLike(post),
+                            onComment: () => _openPostThread(post, autoFocus: true),
+                            onTapComments: () => _openPostThread(post, autoFocus: false),
+                            onDelete: (Supabase.instance.client.auth.currentUser?.id == post.authorId) ? () async {
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: const Text('Eliminar publicación'),
+                                    content: const Text('¿Estás seguro?'),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+                                      TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Eliminar', style: TextStyle(color: Colors.red))),
+                                    ],
+                                  ),
+                                );
+                                if (confirm == true) {
+                                  try {
+                                    await Supabase.instance.client.from('profile_wall_posts').delete().eq('id', post.id);
+                                    setState(() => _wallPosts.removeAt(index));
+                                  } catch (e) {
+                                    debugPrint('Error deleting post: $e');
+                                  }
+                                }
+                            } : null,
+                         );
+                       },
+                       childCount: _wallPosts.length,
+                     ),
+                   ),
+                   
+           const SliverToBoxAdapter(child: SizedBox(height: 80)),
+      ],
+    );
+  }
+
+  Widget _buildActivityTab() {
+    return const Center(child: Text("Actividad próximamente", style: TextStyle(color: Colors.white54)));
+  }
+
+  void _showCreatePostDialog() {
+    final TextEditingController dialogController = TextEditingController();
+    bool isPosting = false;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            backgroundColor: NeoColors.card,
+            title: const Text('Crear publicación', style: TextStyle(color: Colors.white)),
+            content: TextField(
+              controller: dialogController,
+              decoration: const InputDecoration(
+                hintText: 'Escribe algo en tu muro...',
+                hintStyle: TextStyle(color: Colors.grey),
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
+              style: const TextStyle(color: Colors.white),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancelar'),
+              ),
+              ElevatedButton(
+                onPressed: isPosting
+                    ? null
+                    : () async {
+                        if (dialogController.text.trim().isEmpty) return;
+                        setDialogState(() => isPosting = true);
+                        try {
+                           final supabase = Supabase.instance.client;
+                           await supabase.from('profile_wall_posts').insert({
+                             'profile_user_id': widget.userId,
+                             'community_id': widget.communityId,
+                             'author_id': supabase.auth.currentUser!.id,
+                             'content': dialogController.text.trim(),
+                             'created_at': DateTime.now().toIso8601String(),
+                           });
+                           
+                           Navigator.pop(dialogContext);
+                           _fetchUser();
+                        } catch (e) {
+                           setDialogState(() => isPosting = false);
+                           ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Error: $e')));
+                        }
+                      },
+                style: ElevatedButton.styleFrom(backgroundColor: NeoColors.accent),
+                child: isPosting
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('Publicar'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showComposerSheet() async {
+    final supabase = Supabase.instance.client;
+    final currentUserId = supabase.auth.currentUser!.id;
+    
+    // Fetch current user's local nickname and avatar for this community
+    String? localNickname;
+    String? localAvatarUrl;
+    
+    try {
+      final membership = await supabase
+          .from('community_members')
+          .select('nickname, avatar_url')
+          .eq('user_id', currentUserId)
+          .eq('community_id', widget.communityId)
+          .maybeSingle();
+      
+      if (membership != null) {
+        if (membership['nickname'] != null && membership['nickname'].toString().isNotEmpty) {
+          localNickname = membership['nickname'];
+        }
+        if (membership['avatar_url'] != null && membership['avatar_url'].toString().isNotEmpty) {
+          localAvatarUrl = membership['avatar_url'];
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching local membership: $e');
+    }
+    
+    if (!mounted) return;
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => WallThreadsComposerSheet(
+        currentUser: UserEntity(
+          id: currentUserId,
+          email: supabase.auth.currentUser!.email ?? '',
+          username: supabase.auth.currentUser!.userMetadata?['username'] ?? 'Usuario',
+          createdAt: DateTime.now(),
+          avatarUrl: supabase.auth.currentUser!.userMetadata?['avatar_url'],
+          neocoinsBalance: 0,
+          isVip: false,
+        ),
+        profileUser: _user!,
+        communityId: widget.communityId,
+        isSelfProfile: currentUserId == widget.userId,
+        localNickname: localNickname,
+        localAvatarUrl: localAvatarUrl,
+        onSuccess: () {
+          _fetchUser();
+        },
+      ),
+    );
+  }
+
   void _showProfileMenu(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -690,7 +1000,6 @@ class _PublicUserProfileScreenState
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Row(
@@ -752,255 +1061,11 @@ class _PublicUserProfileScreenState
                 },
               ),
               
-              // Crear publicación
-              ListTile(
-                leading: const Icon(Icons.create_outlined, color: NeoColors.accent),
-                title: const Text('Crear publicación', style: TextStyle(color: Colors.white)),
-                subtitle: const Text('Publica algo en tu muro', style: TextStyle(color: NeoColors.textSecondary, fontSize: 12)),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _showCreatePostDialog();
-                },
-              ),
               
               const SizedBox(height: 16),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  /// Show dialog to create a wall post
-  void _showCreatePostDialog() {
-    final TextEditingController dialogController = TextEditingController();
-    bool isPosting = false;
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            backgroundColor: NeoColors.card,
-            title: const Text(
-              'Crear publicación',
-              style: TextStyle(color: NeoColors.textPrimary),
-            ),
-            content: TextField(
-              controller: dialogController,
-              autofocus: true,
-              maxLines: 5,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: 'Escribe algo en tu muro...',
-                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: NeoColors.border),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: NeoColors.border),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: NeoColors.accent),
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: isPosting ? null : () => Navigator.pop(dialogContext),
-                child: const Text('Cancelar'),
-              ),
-              ElevatedButton(
-                onPressed: isPosting
-                    ? null
-                    : () async {
-                        final content = dialogController.text.trim();
-                        if (content.isEmpty) return;
-
-                        setDialogState(() => isPosting = true);
-
-                        try {
-                          await Supabase.instance.client
-                              .from('profile_wall_posts')
-                              .insert({
-                            'profile_user_id': widget.userId,
-                            'author_id': widget.userId,
-                            'community_id': widget.communityId,
-                            'content': content,
-                          });
-                          
-                          if (!dialogContext.mounted) return;
-                          Navigator.pop(dialogContext);
-                          
-                          // Reload wall posts
-                          _fetchUser();
-                          
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Publicación creada'),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
-                        } catch (e) {
-                          setDialogState(() => isPosting = false);
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Error: $e'),
-                              backgroundColor: NeoColors.error,
-                            ),
-                          );
-                        }
-                      },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: NeoColors.accent,
-                  foregroundColor: Colors.white,
-                ),
-                child: isPosting
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text('Publicar'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildWallTab() {
-    return Container(
-      color: Colors.black,
-      child: ListView(
-        padding: const EdgeInsets.all(NeoSpacing.md),
-        children: [
-          // Composer launcher - always first
-          WallThreadsComposerLauncher(
-            currentUser: UserEntity(
-              id: Supabase.instance.client.auth.currentUser!.id,
-              email: Supabase.instance.client.auth.currentUser!.email ?? '',
-              username: Supabase.instance.client.auth.currentUser!.userMetadata?['username'] ?? 'Usuario',
-              createdAt: DateTime.now(),
-              avatarUrl: Supabase.instance.client.auth.currentUser!.userMetadata?['avatar_url'],
-              neocoinsBalance: 0,
-              isVip: false,
-            ),
-            profileUser: _user!,
-            isSelfProfile: Supabase.instance.client.auth.currentUser!.id == widget.userId,
-            onTap: () => _showComposerSheet(),
-          ),
-          
-          // Divider sutil
-          Divider(
-            height: 1,
-            thickness: 0.5,
-            color: Colors.grey[900],
-          ),
-          
-          // Wall posts
-          if (_wallPosts.isEmpty)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 48),
-                child: Column(
-                  children: [
-                    Icon(Icons.article_outlined, size: 48, color: Colors.grey[800]),
-                    const SizedBox(height: 12),
-                    Text('Aún no hay publicaciones', style: TextStyle(color: Colors.grey[600])),
-                  ],
-                ),
-              ),
-            )
-          else
-            ...(_wallPosts.asMap().entries.map((entry) {
-              final index = entry.key;
-              final post = entry.value;
-              final isLastPost = index == _wallPosts.length - 1;
-              
-              return WallPostItem(
-                post: post,
-                onLike: () => _togglePostLike(post),
-                onReply: () => _openPostThread(post, autoFocus: true),
-                onMenuTap: (Supabase.instance.client.auth.currentUser?.id == post.authorId)
-                    ? () async {
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('Eliminar publicación'),
-                            content: const Text('¿Estás seguro de que quieres eliminar esta publicación?'),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: const Text('Cancelar'),
-                              ),
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, true),
-                                child: const Text('Eliminar', style: TextStyle(color: Colors.red)),
-                              ),
-                            ],
-                          ),
-                        );
-                        
-                        if (confirm == true) {
-                          try {
-                            await Supabase.instance.client
-                                .from('profile_wall_posts')
-                                .delete()
-                                .eq('id', post.id);
-                            
-                            setState(() {
-                              _wallPosts.removeAt(index);
-                            });
-                          } catch (e) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Error al eliminar: $e')),
-                              );
-                            }
-                          }
-                        }
-                      }
-                    : null,
-              );
-            })),
-        ],
-      ),
-    );
-  }
-
-  void _showComposerSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => WallThreadsComposerSheet(
-        currentUser: UserEntity(
-          id: Supabase.instance.client.auth.currentUser!.id,
-          email: Supabase.instance.client.auth.currentUser!.email ?? '',
-          username: Supabase.instance.client.auth.currentUser!.userMetadata?['username'] ?? 'Usuario',
-          createdAt: DateTime.now(),
-          avatarUrl: Supabase.instance.client.auth.currentUser!.userMetadata?['avatar_url'],
-          neocoinsBalance: 0,
-          isVip: false,
-        ),
-        profileUser: _user!,
-        communityId: widget.communityId,
-        isSelfProfile: Supabase.instance.client.auth.currentUser!.id == widget.userId,
-        onSuccess: () {
-          // Refresh wall posts
-          _fetchUser();
-        },
       ),
     );
   }
@@ -1055,47 +1120,8 @@ class _PublicUserProfileScreenState
       debugPrint('Error toggling post like: $e');
     }
   }
-
-  Widget _buildActivityTab() {
-    return Container(
-      color: Colors.black,
-      child: const Center(
-        child: Text(
-          'Próximamente',
-          style: TextStyle(color: Colors.grey),
-        ),
-      ),
-    );
-  }
-
-  Color _getRoleColor(String role) {
-    switch (role) {
-      case 'owner':
-        return const Color(0xFFFFD700); // Gold
-      case 'leader':
-        return const Color(0xFF8B5CF6); // Purple
-      case 'agent':
-        return const Color(0xFFEC4899); // Pink
-      default:
-        return Colors.grey;
-    }
-  }
-
-  String _getRoleDisplayName(String role) {
-    switch (role) {
-      case 'owner':
-        return 'Dueño';
-      case 'leader':
-        return 'Líder';
-      case 'agent':
-        return 'Agente';
-      default:
-        return 'Miembro';
-    }
-  }
 }
 
-// Helper for sticky header
 class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
   final TabBar _tabBar;
 
@@ -1110,7 +1136,7 @@ class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
   Widget build(
       BuildContext context, double shrinkOffset, bool overlapsContent) {
     return Container(
-      color: Colors.black, // Background color for sticky header
+      color: Colors.black,
       padding: const EdgeInsets.only(bottom: 16),
       child: _tabBar,
     );

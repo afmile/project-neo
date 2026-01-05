@@ -248,7 +248,7 @@ class _BentoPostCardState extends State<BentoPostCard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  widget.post.authorName,
+              widget.post.authorDisplayName ?? widget.post.authorName,
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -439,7 +439,7 @@ class _BentoPostCardState extends State<BentoPostCard> {
         Row(
           children: [
             Text(
-              comment.authorName,
+              comment.authorDisplayName ?? comment.authorName,
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w600,
