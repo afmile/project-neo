@@ -8,10 +8,12 @@
 library;
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../../auth/domain/entities/user_entity.dart';
@@ -137,6 +139,107 @@ class _WallThreadsComposerSheetState extends State<WallThreadsComposerSheet>
     });
   }
 
+  /// Comprime una imagen para optimizar storage
+  /// Target: ~200KB por imagen, max 1920x1920px
+  /// Reducción esperada: ~90-95%
+  Future<Uint8List?> _compressImage(XFile imageFile) async {
+    try {
+      print('🟡 DEBUG: Comprimiendo ${imageFile.name}...');
+      
+      // Obtener tamaño original
+      final originalBytes = await imageFile.readAsBytes();
+      final originalSizeKB = (originalBytes.length / 1024).toStringAsFixed(2);
+      print('🟡 DEBUG: Tamaño original: $originalSizeKB KB');
+      
+      // Comprimir con calidad 85, max 1920x1920
+      final compressedBytes = await FlutterImageCompress.compressWithFile(
+        imageFile.path,
+        minWidth: 1920,
+        minHeight: 1920,
+        quality: 85, // Balance perfecto calidad/tamaño
+        format: CompressFormat.jpeg,
+      );
+      
+      if (compressedBytes == null) {
+        print('🔴 ERROR: Compresión falló para ${imageFile.name}');
+        return null;
+      }
+      
+      // Calcular reducción
+      final compressedSizeKB = (compressedBytes.length / 1024).toStringAsFixed(2);
+      final reduction = ((1 - (compressedBytes.length / originalBytes.length)) * 100).toStringAsFixed(1);
+      
+      print('🟢 DEBUG: Tamaño comprimido: $compressedSizeKB KB');
+      print('🟢 DEBUG: Reducción: $reduction%');
+      
+      return compressedBytes;
+    } catch (e) {
+      print('🔴 ERROR comprimiendo imagen: $e');
+      return null;
+    }
+  }
+
+  /// Sube imágenes seleccionadas a Supabase Storage
+  /// Retorna lista de URLs públicas o null si falla
+  Future<List<String>?> _uploadImagesToStorage() async {
+    if (_selectedImages.isEmpty) return null;
+
+    try {
+      final List<String> uploadedUrls = [];
+      
+      for (int i = 0; i < _selectedImages.length; i++) {
+        final image = _selectedImages[i];
+        
+        // 1. COMPRIMIR imagen primero
+        print('🟡 DEBUG: Procesando imagen ${i + 1}/${_selectedImages.length}');
+        final compressedBytes = await _compressImage(image);
+        
+        if (compressedBytes == null) {
+          print('🔴 ERROR: No se pudo comprimir imagen $i');
+          return null; // Fallar si alguna compresión falla
+        }
+        
+        // 2. Usar bytes comprimidos para upload
+        final bytes = compressedBytes;
+        
+        // 3. Generar nombre único (siempre .jpg porque comprimimos a JPEG)
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final fileName = '${widget.communityId}/${timestamp}_$i.jpg';
+        
+        print('🟡 DEBUG: Subiendo a Storage: $fileName');
+        
+        // 4. Upload bytes comprimidos
+        await Supabase.instance.client.storage
+            .from('wall-post-images')
+            .uploadBinary(
+              fileName,
+              bytes,
+              fileOptions: const FileOptions(
+                cacheControl: '3600',
+                upsert: false,
+                contentType: 'image/jpeg',
+              ),
+            );
+        
+        // 5. Obtener URL pública
+        final publicUrl = Supabase.instance.client.storage
+            .from('wall-post-images')
+            .getPublicUrl(fileName);
+        
+        uploadedUrls.add(publicUrl);
+        
+        print('🟢 DEBUG: Imagen $i subida: $publicUrl');
+      }
+      
+      print('🟢 DEBUG: Total ${uploadedUrls.length} imágenes subidas exitosamente');
+      return uploadedUrls;
+    } catch (e, stackTrace) {
+      print('🔴 ERROR subiendo imágenes: $e');
+      print('🔴 StackTrace: $stackTrace');
+      return null;
+    }
+  }
+
   Future<void> _handlePost() async {
     if (!_canPost) return;
 
@@ -159,41 +262,98 @@ class _WallThreadsComposerSheetState extends State<WallThreadsComposerSheet>
         // COMMUNITY WALL: Insert to wall_posts
         print('🟢 DEBUG: Insertando en wall_posts (muro de comunidad)');
         
+        // Upload imágenes primero (si hay)
+        List<String>? mediaUrls;
+        if (_selectedImages.isNotEmpty) {
+          print('🟡 DEBUG: Subiendo ${_selectedImages.length} imágenes...');
+          
+          mediaUrls = await _uploadImagesToStorage();
+          
+          if (mediaUrls == null) {
+            // Error en upload
+            setState(() => _isPosting = false);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Error al subir imágenes. Intenta de nuevo.'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+            return; // Abort post
+          }
+          
+          print('🟢 DEBUG: ${mediaUrls.length} imágenes subidas exitosamente');
+        }
+        
         final payload = {
           'author_id': widget.currentUser.id,
           'community_id': widget.communityId,
           'content': _textController.text.trim(),
-          // profile_user_id stays NULL for community posts
+          if (mediaUrls != null && mediaUrls.isNotEmpty) 'media_url': mediaUrls.first,
+          if (mediaUrls != null && mediaUrls.isNotEmpty) 'media_type': 'image',
         };
-        print('🟡 DEBUG: Payload: $payload');
+        print('🟡 DEBUG: Payload para wall_posts: $payload');
         
         await Supabase.instance.client
             .from('wall_posts')
             .insert(payload);
         
-        print('🟢 DEBUG: Insert exitoso en wall_posts');
+        print('🟢 DEBUG: Post insertado en wall_posts');
       } else {
         // PROFILE WALL: Insert to profile_wall_posts
         print('🟢 DEBUG: Insertando en profile_wall_posts (muro de perfil)');
+        
+        // Upload imágenes primero (si hay)
+        List<String>? mediaUrls;
+        if (_selectedImages.isNotEmpty) {
+          print('🟡 DEBUG: Subiendo ${_selectedImages.length} imágenes...');
+          
+          mediaUrls = await _uploadImagesToStorage();
+          
+          if (mediaUrls == null) {
+            // Error en upload
+            setState(() => _isPosting = false);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Error al subir imágenes. Intenta de nuevo.'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+            return; // Abort post
+          }
+          
+          print('🟢 DEBUG: ${mediaUrls.length} imágenes subidas exitosamente');
+        }
         
         final payload = {
           'profile_user_id': widget.profileUser.id,  // Profile owner
           'author_id': widget.currentUser.id,         // Post author
           'community_id': widget.communityId,
           'content': _textController.text.trim(),
+          if (mediaUrls != null && mediaUrls.isNotEmpty) 'media_url': mediaUrls.first,
+          if (mediaUrls != null && mediaUrls.isNotEmpty) 'media_type': 'image',
         };
-        print('🟡 DEBUG: Payload: $payload');
+        print('🟡 DEBUG: Payload para profile_wall_posts: $payload');
         
         await Supabase.instance.client
             .from('profile_wall_posts')
             .insert(payload);
         
-        print('🟢 DEBUG: Insert exitoso en profile_wall_posts');
+        print('🟢 DEBUG: Post insertado en profile_wall_posts');
       }
       
       print('🟢 DEBUG: ========== PUBLICACIÓN COMPLETADA ==========');
 
       if (!mounted) return;
+      
+      // Limpiar estado
+      _textController.clear();
+      setState(() {
+        _selectedImages.clear();  // Clear selected images
+      });
       
       Navigator.pop(context);
       widget.onSuccess();
