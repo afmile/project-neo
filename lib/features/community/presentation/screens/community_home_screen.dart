@@ -1086,10 +1086,16 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
   /// Build wall post composer widget - Button to open modal
   Widget _buildWallPostComposer() {
     final currentUser = ref.watch(currentUserProvider);
+    final localIdentityAsync = ref.watch(myLocalIdentityProvider(widget.community.id));
     
     if (currentUser == null) {
       return const SizedBox.shrink();
     }
+    
+    // Use local identity if available, otherwise fallback to global
+    final localIdentity = localIdentityAsync.valueOrNull;
+    final displayName = localIdentity?.displayName ?? currentUser.username;
+    final avatarUrl = localIdentity?.avatarUrl ?? currentUser.avatarUrl;
     
     return InkWell(
       onTap: () => _openComposerModal(),
@@ -1106,18 +1112,16 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
         ),
         child: Row(
           children: [
-            // Avatar
+            // Avatar - now uses local identity
             CircleAvatar(
               radius: 18,
               backgroundColor: NeoColors.accent.withValues(alpha: 0.15),
-              backgroundImage: currentUser.avatarUrl != null &&
-                      currentUser.avatarUrl!.isNotEmpty
-                  ? NetworkImage(currentUser.avatarUrl!)
+              backgroundImage: avatarUrl != null && avatarUrl.isNotEmpty
+                  ? NetworkImage(avatarUrl)
                   : null,
-              child: currentUser.avatarUrl == null ||
-                      currentUser.avatarUrl!.isEmpty
+              child: avatarUrl == null || avatarUrl.isEmpty
                   ? Text(
-                      currentUser.username[0].toUpperCase(),
+                      displayName[0].toUpperCase(),
                       style: const TextStyle(
                         color: NeoColors.accent,
                         fontWeight: FontWeight.w600,
@@ -1155,6 +1159,23 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
     
     if (currentUser == null) return;
     
+    // Get local identity and convert to CommunityMember for composer
+    final localIdentity = ref.read(myLocalIdentityProvider(widget.community.id)).valueOrNull;
+    CommunityMember? localProfile;
+    
+    if (localIdentity != null) {
+      localProfile = CommunityMember(
+        id: localIdentity.userId,
+        username: currentUser.username, // Global fallback
+        nickname: localIdentity.displayName != currentUser.username 
+            ? localIdentity.displayName 
+            : null, // Only set nickname if different from global
+        avatarUrl: localIdentity.avatarUrl,
+        role: localIdentity.role,
+        joinedAt: DateTime.now(),
+      );
+    }
+    
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1164,6 +1185,8 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
         profileUser: currentUser,
         communityId: widget.community.id,
         isSelfProfile: true,
+        isFromCommunityWall: true,
+        localProfile: localProfile,  // ✅ NEW: Pass local identity
         onSuccess: () {
           // Refresh wall posts after posting
           ref

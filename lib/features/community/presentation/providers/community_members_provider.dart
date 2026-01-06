@@ -9,26 +9,33 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// A member of a community with their profile info
 class CommunityMember {
   final String id;
-  final String username;
-  final String? avatarUrl;
-  final String role; // 'owner', 'agent', 'leader', 'member'
+  final String username;      // Global username (from users_global)
+  final String? nickname;     // Local community nickname (from community_members)
+  final String? avatarUrl;    // Can be local or global
+  final String role;
   final DateTime joinedAt;
 
   const CommunityMember({
     required this.id,
     required this.username,
+    this.nickname,
     this.avatarUrl,
     required this.role,
     required this.joinedAt,
   });
 
   factory CommunityMember.fromJson(Map<String, dynamic> json) {
+    // Parse nested user object from JOIN query
+    final userObj = json['user'] as Map<String, dynamic>?;
+    
     return CommunityMember(
-      id: json['id'] as String,
-      username: json['username'] as String? ?? 'Usuario',
-      avatarUrl: json['avatar_global_url'] as String?,
-      role: 'member', // Default as per requirements
-      joinedAt: DateTime.tryParse(json['created_at'] as String? ?? '') ?? DateTime.now(),
+      id: json['user_id'] as String,
+      username: userObj?['username'] as String? ?? 'Usuario',
+      nickname: json['nickname'] as String?,
+      avatarUrl: json['avatar_url'] as String? ?? 
+                userObj?['avatar_global_url'] as String?,
+      role: json['role'] as String? ?? 'member',
+      joinedAt: DateTime.tryParse(json['joined_at'] as String? ?? '') ?? DateTime.now(),
     );
   }
 

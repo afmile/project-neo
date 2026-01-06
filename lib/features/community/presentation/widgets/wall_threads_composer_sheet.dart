@@ -24,6 +24,7 @@ class WallThreadsComposerSheet extends StatefulWidget {
   final String communityId;
   final bool isSelfProfile;
   final VoidCallback onSuccess;
+  final bool isFromCommunityWall;  // NEW: true = community wall, false = profile wall
   
   /// The local community profile of the author (current user)
   final CommunityMember? localProfile;
@@ -40,6 +41,7 @@ class WallThreadsComposerSheet extends StatefulWidget {
     required this.onSuccess,
     this.localProfile,
     this.wallOwnerProfile,
+    this.isFromCommunityWall = false,  // NEW: Distinguish community wall from profile wall
   });
 
   @override
@@ -141,31 +143,54 @@ class _WallThreadsComposerSheetState extends State<WallThreadsComposerSheet>
     setState(() => _isPosting = true);
 
     try {
-      // Debug: Log initial state
       print('🟡 DEBUG: ========== INICIANDO PUBLICACIÓN ==========');
       print('🟡 DEBUG: currentUser.id: ${widget.currentUser.id}');
       print('🟡 DEBUG: profileUser.id: ${widget.profileUser.id}');
       print('🟡 DEBUG: communityId: ${widget.communityId}');
       print('🟡 DEBUG: isSelfProfile: ${widget.isSelfProfile}');
+      print('🟡 DEBUG: isFromCommunityWall: ${widget.isFromCommunityWall}');
       print('🟡 DEBUG: content: "${_textController.text.trim()}"');
       
-      // WallThreadsComposerSheet is ONLY used for profile walls
-      // ALWAYS insert to profile_wall_posts (whether own or other's profile)
-      print('🟢 DEBUG: Insertando en profile_wall_posts (contexto de perfil)');
+      // Routing logic:
+      // - isFromCommunityWall = true → wall_posts (community public feed)
+      // - isFromCommunityWall = false → profile_wall_posts (user profile wall)
       
-      final payload = {
-        'profile_user_id': widget.profileUser.id,  // Profile wall owner
-        'author_id': widget.currentUser.id,         // Post author
-        'community_id': widget.communityId,
-        'content': _textController.text.trim(),
-      };
-      print('🟡 DEBUG: Payload: $payload');
+      if (widget.isFromCommunityWall) {
+        // COMMUNITY WALL: Insert to wall_posts
+        print('🟢 DEBUG: Insertando en wall_posts (muro de comunidad)');
+        
+        final payload = {
+          'author_id': widget.currentUser.id,
+          'community_id': widget.communityId,
+          'content': _textController.text.trim(),
+          // profile_user_id stays NULL for community posts
+        };
+        print('🟡 DEBUG: Payload: $payload');
+        
+        await Supabase.instance.client
+            .from('wall_posts')
+            .insert(payload);
+        
+        print('🟢 DEBUG: Insert exitoso en wall_posts');
+      } else {
+        // PROFILE WALL: Insert to profile_wall_posts
+        print('🟢 DEBUG: Insertando en profile_wall_posts (muro de perfil)');
+        
+        final payload = {
+          'profile_user_id': widget.profileUser.id,  // Profile owner
+          'author_id': widget.currentUser.id,         // Post author
+          'community_id': widget.communityId,
+          'content': _textController.text.trim(),
+        };
+        print('🟡 DEBUG: Payload: $payload');
+        
+        await Supabase.instance.client
+            .from('profile_wall_posts')
+            .insert(payload);
+        
+        print('🟢 DEBUG: Insert exitoso en profile_wall_posts');
+      }
       
-      final result = await Supabase.instance.client
-          .from('profile_wall_posts')
-          .insert(payload);
-      
-      print('🟢 DEBUG: Insert exitoso: $result');
       print('🟢 DEBUG: ========== PUBLICACIÓN COMPLETADA ==========');
 
       if (!mounted) return;
@@ -329,15 +354,17 @@ class _WallThreadsComposerSheetState extends State<WallThreadsComposerSheet>
   }
 
   Widget _buildAuthorInfo() {
-    // Identity Logic:
-    // 1. Try Local Community Profile (Nickname/Avatar) from CommunityMember object
-    // 2. Fallback to Global User Data (Username/Avatar)
+    // Display local nickname if available, otherwise global username
+    final displayName = widget.localProfile?.nickname ?? 
+                       widget.localProfile?.username ?? 
+                       widget.currentUser.username;
     
-    final displayName = widget.localProfile?.username ?? widget.currentUser.username;
-    final avatarUrl = widget.localProfile?.avatarUrl ?? widget.currentUser.avatarUrl;
+    final avatarUrl = widget.localProfile?.avatarUrl ?? 
+                     widget.currentUser.avatarUrl;
     
-    // Profile User Logic (Wall Owner):
-    final profileUserNickname = widget.wallOwnerProfile?.username ?? widget.profileUser.username;
+    final profileUserNickname = widget.wallOwnerProfile?.nickname ?? 
+                               widget.wallOwnerProfile?.username ?? 
+                               widget.profileUser.username;
     
     final profileDisplayName = widget.isSelfProfile 
         ? 'tu muro'

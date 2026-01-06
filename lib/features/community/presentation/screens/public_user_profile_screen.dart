@@ -26,6 +26,7 @@ import '../providers/friendship_provider.dart';
 import '../widgets/profile_action_buttons.dart';
 import 'wall_post_thread_screen.dart';
 import '../providers/community_members_provider.dart';
+import '../providers/local_identity_providers.dart';
 
 class PublicUserProfileScreen extends ConsumerStatefulWidget {
   final String userId;
@@ -101,6 +102,122 @@ class _PublicUserProfileScreenState
 
   List<WallPost> _wallPosts = [];
   int _postsCount = 0;
+
+  /// Fetches wall posts with local profile injection (for refresh after posting)
+  Future<void> _fetchWallPosts() async {
+    final supabase = Supabase.instance.client;
+    
+    try {
+      final postsResponse = await supabase
+          .from('profile_wall_posts')
+          .select('''
+             *,
+             author:users_global!profile_wall_posts_author_id_fkey(username, avatar_global_url),
+             user_likes:profile_wall_post_likes(user_id),
+             profile_wall_post_comments(
+               id, content, created_at, author_id,
+               author:users_global(username, avatar_global_url),
+               user_likes:profile_wall_post_comment_likes(user_id)
+             )
+           ''')
+          .eq('profile_user_id', widget.userId)
+          .eq('community_id', widget.communityId)
+          .order('created_at', referencedTable: 'profile_wall_post_comments', ascending: true)
+          .limit(1, referencedTable: 'profile_wall_post_comments')
+          .order('created_at', ascending: false)
+          .limit(20);
+
+      if (postsResponse is! List) return;
+
+      // Fetch comment counts
+      if (postsResponse.isNotEmpty) {
+        final postIds = postsResponse.map((p) => p['id'] as String).toList();
+        final commentsResponse = await supabase
+            .from('profile_wall_post_comments')
+            .select('post_id')
+            .inFilter('post_id', postIds);
+
+        final commentsCounts = <String, int>{};
+        for (final comment in commentsResponse as List) {
+          final postId = comment['post_id'] as String;
+          commentsCounts[postId] = (commentsCounts[postId] ?? 0) + 1;
+        }
+        for (final post in postsResponse) {
+          post['comments_count'] = commentsCounts[post['id']] ?? 0;
+        }
+      }
+
+      // Collect all author IDs for local profile lookup
+      final allAuthorIds = <String>{};
+      for (final post in postsResponse) {
+        allAuthorIds.add(post['author_id'] as String);
+        final comments = post['profile_wall_post_comments'] as List?;
+        if (comments != null) {
+          for (final comment in comments) {
+            allAuthorIds.add(comment['author_id'] as String);
+          }
+        }
+      }
+
+      // Fetch local profiles from community_members
+      final localProfiles = <String, Map<String, dynamic>>{};
+      if (allAuthorIds.isNotEmpty) {
+        final profilesResponse = await supabase
+            .from('community_members')
+            .select('user_id, nickname, avatar_url')
+            .eq('community_id', widget.communityId)
+            .inFilter('user_id', allAuthorIds.toList());
+
+        for (final profile in profilesResponse as List) {
+          localProfiles[profile['user_id']] = profile;
+        }
+      }
+
+      // Inject local profile data into posts
+      for (final post in postsResponse) {
+        final postAuthorId = post['author_id'] as String;
+        final postLocalProfile = localProfiles[postAuthorId];
+        
+        if (postLocalProfile != null) {
+          if (post['author'] == null) post['author'] = <String, dynamic>{};
+          if (postLocalProfile['nickname'] != null) {
+            post['author']['display_name'] = postLocalProfile['nickname'];
+          }
+          if (postLocalProfile['avatar_url'] != null) {
+            post['author']['avatar_global_url'] = postLocalProfile['avatar_url'];
+          }
+        }
+
+        // Comment authors
+        final comments = post['profile_wall_post_comments'] as List?;
+        if (comments != null) {
+          for (final comment in comments) {
+            final commentAuthorId = comment['author_id'] as String;
+            final commentLocalProfile = localProfiles[commentAuthorId];
+            
+            if (commentLocalProfile != null) {
+              if (comment['author'] == null) comment['author'] = <String, dynamic>{};
+              if (commentLocalProfile['nickname'] != null) {
+                comment['author']['display_name'] = commentLocalProfile['nickname'];
+              }
+              if (commentLocalProfile['avatar_url'] != null) {
+                comment['author']['avatar_global_url'] = commentLocalProfile['avatar_url'];
+              }
+            }
+          }
+        }
+      }
+
+      final currentUser = ref.read(authProvider).user;
+      if (mounted) {
+        setState(() {
+          _wallPosts = WallPostModel.listFromSupabase(postsResponse, currentUser?.id);
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching wall posts: $e');
+    }
+  }
 
   Future<void> _fetchUser() async {
     final supabase = Supabase.instance.client;
@@ -430,7 +547,9 @@ class _PublicUserProfileScreenState
   @override
   Widget build(BuildContext context) {
     bool isOwnProfile = false;
-    final currentUser = ref.watch(authProvider).user;
+    // Use ref.read instead of ref.watch to avoid rebuild loop
+    // We only need to check ownership once, not react to auth changes
+    final currentUser = ref.read(authProvider).user;
     if (currentUser != null && currentUser.id == widget.userId) {
       isOwnProfile = true;
     }
@@ -766,6 +885,13 @@ class _PublicUserProfileScreenState
     if (currentUser != null && currentUser.id == widget.userId) {
       isOwnProfile = true;
     }
+    
+    // Get local identity for avatar display
+    final localIdentity = ref.watch(myLocalIdentityProvider(widget.communityId));
+    final localAvatar = localIdentity.valueOrNull?.avatarUrl;
+    final localDisplayName = localIdentity.valueOrNull?.displayName ?? 
+                            currentUser?.username ?? 
+                            'U';
 
     return CustomScrollView(
       slivers: [
@@ -775,21 +901,30 @@ class _PublicUserProfileScreenState
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               child: Row(
                 children: [
+                   // Avatar - now uses local identity
                    Container(
                      width: 40,
                      height: 40,
-                     decoration: const BoxDecoration(
+                     decoration: BoxDecoration(
                        color: NeoColors.accent,
                        shape: BoxShape.circle,
+                       image: localAvatar != null && localAvatar.isNotEmpty
+                           ? DecorationImage(
+                               image: NetworkImage(localAvatar),
+                               fit: BoxFit.cover,
+                             )
+                           : null,
                      ),
                      alignment: Alignment.center,
-                     child: Text(
-                       _user?.username[0].toUpperCase() ?? 'A',
-                       style: const TextStyle(
-                         color: Colors.white,
-                         fontWeight: FontWeight.bold,
-                       ),
-                     ),
+                     child: localAvatar == null || localAvatar.isEmpty
+                         ? Text(
+                             localDisplayName[0].toUpperCase(),
+                             style: const TextStyle(
+                               color: Colors.white,
+                               fontWeight: FontWeight.bold,
+                             ),
+                           )
+                         : null,
                    ),
                    const SizedBox(width: 12),
                    Expanded(
@@ -1000,7 +1135,9 @@ class _PublicUserProfileScreenState
         localProfile: localProfile,
         wallOwnerProfile: wallOwnerProfile,
         onSuccess: () {
-          _fetchUser();
+          // Refresh the wall posts to show the new post with correct local identity
+          // Use _fetchWallPosts which correctly loads from repository with local profile injection
+          _fetchWallPosts();
         },
       ),
     );
