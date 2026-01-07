@@ -592,19 +592,21 @@ class CommunityRepositoryImpl implements CommunityRepository {
     try {
       print('🔄 Fetching paginated wall posts for community: $communityId');
 
-      // Build base query
+      // Build base query with LEFT JOIN to community_members for local identity
+      // Using LEFT JOIN ensures posts load even if member data is missing/inaccessible
       var query = _supabase
           .from('wall_posts')
           .select('''
             *,
-            author:users_global!wall_posts_profile_user_id_fkey(username, avatar_global_url),
+            author_global:users_global!wall_posts_author_id_fkey(username, avatar_global_url),
+            author_local:community_members(user_id, community_id, nickname, avatar_url, is_leader, is_moderator),
             user_likes:wall_post_likes(user_id),
             wall_post_comments(
               id,
               content,
               created_at,
               author_id,
-              author:users_global(username, avatar_global_url),
+              author_global:users_global(username, avatar_global_url),
               user_likes:wall_post_comment_likes(user_id)
             )
           ''')
@@ -636,30 +638,23 @@ class CommunityRepositoryImpl implements CommunityRepository {
 
       print('📦 Fetched ${posts.length} posts');
 
-      // Extract IDs for batch fetching
-      // Extract IDs for batch fetching
+      // Extract post IDs and comment author IDs for batch fetching
       final postIds = posts.map((p) => p['id'] as String).toList();
+      final commentAuthorIds = <String>{};
       
-      // Collect ALL author IDs (posts + comments)
-      final allAuthorIds = <String>{};
-      
-      // 1. Post authors
-      for (final p in posts) {
-        allAuthorIds.add(p['author_id'] as String);
-        
-        // 2. Comment authors
-        final comments = p['wall_post_comments'] as List<dynamic>?;
+      for (final post in posts) {
+        final comments = post['wall_post_comments'] as List<dynamic>?;
         if (comments != null) {
           for (final c in comments) {
-            allAuthorIds.add(c['author_id'] as String);
+            commentAuthorIds.add(c['author_id'] as String);
           }
         }
       }
 
       final commentsCounts = <String, int>{};
-      final localProfiles = <String, Map<String, dynamic>>{};
+      final commentLocalProfiles = <String, Map<String, dynamic>>{};
 
-      // Parallel fetch: Comments counts AND Local Profiles
+      // Parallel fetch: Comments counts AND Local Profiles for comment authors
       await Future.wait([
         // Fetch comments counts
         Future(() async {
@@ -675,67 +670,115 @@ class CommunityRepositoryImpl implements CommunityRepository {
             }
           }
         }),
-        // Fetch local profiles for ALL authors in this community
+        // Fetch local profiles for comment authors
         Future(() async {
-          if (allAuthorIds.isNotEmpty) {
+          if (commentAuthorIds.isNotEmpty) {
             final profilesResponse = await _supabase
                 .from('community_members')
-                .select('user_id, nickname, avatar_url')
+                .select('user_id, nickname, avatar_url, is_leader, is_moderator')
                 .eq('community_id', communityId)
-                .inFilter('user_id', allAuthorIds.toList());
+                .inFilter('user_id', commentAuthorIds.toList());
 
             for (final profile in profilesResponse as List) {
-              localProfiles[profile['user_id']] = profile;
+              commentLocalProfiles[profile['user_id']] = profile;
             }
           }
         }),
       ]);
 
-      // Inject local profile data and comments count into posts
+      // Process posts: merge local and global data, inject comments count
       for (final post in posts) {
         post['comments_count'] = commentsCounts[post['id']] ?? 0;
 
-        // A. Inject for Main Post Author
-        final authorId = post['author_id'];
-        final pLocalProfile = localProfiles[authorId];
+        // 🔍 DEBUG: Log RAW member data to track fallback behavior
+        final rawMemberData = post['author_local'];
+        print('📝 Post ID: ${post['id']} - Author ID: ${post['author_id']}');
+        print('   RAW Member Data: $rawMemberData');
+        print('   Type: ${rawMemberData.runtimeType}');
 
-        if (pLocalProfile != null) {
-          // Override global author data with local profile
-          if (post['author'] == null) post['author'] = <String, dynamic>{};
-
-          if (pLocalProfile['nickname'] != null) {
-            post['author']['display_name'] = pLocalProfile['nickname'];
-          }
-          if (pLocalProfile['avatar_url'] != null) {
-            post['author']['avatar_global_url'] = pLocalProfile['avatar_url'];
-          }
-        }
+        // Merge post author data: prioritize local, fallback to global
+        final authorGlobal = post['author_global'] as Map<String, dynamic>?;
         
-        // B. Inject for Comment Authors
+        // Handle author_local which might be null, a single object, or a list
+        // CRITICAL: Must filter by community_id to get the correct membership
+        Map<String, dynamic>? authorLocal;
+        final authorLocalRaw = post['author_local'];
+        
+        if (authorLocalRaw is List) {
+          print('   ⚠️  Got List with ${authorLocalRaw.length} items - filtering by community_id: $communityId');
+          
+          // Filter by BOTH community_id AND user_id to get the exact membership
+          final filtered = authorLocalRaw.where((item) {
+            if (item is! Map<String, dynamic>) return false;
+            
+            final matchesCommunity = item['community_id'] == communityId;
+            final matchesUser = item['user_id'] == post['author_id'];
+            
+            print('      Item: community_id=${item['community_id']}, user_id=${item['user_id']} -> match=$matchesCommunity && $matchesUser');
+            
+            return matchesCommunity && matchesUser;
+          }).toList();
+          
+          authorLocal = filtered.isNotEmpty ? filtered.first as Map<String, dynamic>? : null;
+          print('   🔍 Filtered result: $authorLocal');
+          
+        } else if (authorLocalRaw is Map<String, dynamic>) {
+          print('   ✓ Got single Map object');
+          
+          // Verify it matches both the author_id AND community_id
+          final matchesCommunity = authorLocalRaw['community_id'] == communityId;
+          final matchesUser = authorLocalRaw['user_id'] == post['author_id'];
+          
+          if (matchesCommunity && matchesUser) {
+            authorLocal = authorLocalRaw;
+            print('   ✓ Map matches community and user');
+          } else {
+            print('   ✗ Map does NOT match (community: $matchesCommunity, user: $matchesUser)');
+          }
+        } else {
+          print('   ✗ Member data is NULL or unknown type');
+        }
+
+        print('   ✅ Resolved Local Profile: $authorLocal');
+        print('   🌍 Global Profile: $authorGlobal');
+
+        post['author'] = <String, dynamic>{
+          'username': authorGlobal?['username'] ?? 'Usuario',
+          'avatar_global_url': authorGlobal?['avatar_global_url'],
+          'display_name': authorLocal?['nickname'],
+          'avatar_url': authorLocal?['avatar_url'],
+          'is_leader': authorLocal?['is_leader'] ?? false,
+          'is_moderator': authorLocal?['is_moderator'] ?? false,
+        };
+
+        // Remove temporary fields
+        post.remove('author_global');
+        post.remove('author_local');
+        
+        // Process comment authors: merge local and global data
         final comments = post['wall_post_comments'] as List<dynamic>?;
         if (comments != null) {
           for (final comment in comments) {
-            final cAuthorId = comment['author_id'];
-            final cLocalProfile = localProfiles[cAuthorId];
+            final cAuthorId = comment['author_id'] as String;
+            final cAuthorGlobal = comment['author_global'] as Map<String, dynamic>?;
+            final cLocalProfile = commentLocalProfiles[cAuthorId];
             
-            if (cLocalProfile != null) {
-              if (comment['author'] == null) comment['author'] = <String, dynamic>{};
-              
-              // Inject Display Name (Nickname)
-              if (cLocalProfile['nickname'] != null) {
-                comment['author']['display_name'] = cLocalProfile['nickname'];
-              }
-              
-              // Inject Avatar
-              if (cLocalProfile['avatar_url'] != null) {
-                comment['author']['avatar_global_url'] = cLocalProfile['avatar_url'];
-              }
-            }
+            comment['author'] = <String, dynamic>{
+              'username': cAuthorGlobal?['username'] ?? 'Usuario',
+              'avatar_global_url': cAuthorGlobal?['avatar_global_url'],
+              'display_name': cLocalProfile?['nickname'],
+              'avatar_url': cLocalProfile?['avatar_url'],
+              'is_leader': cLocalProfile?['is_leader'] ?? false,
+              'is_moderator': cLocalProfile?['is_moderator'] ?? false,
+            };
+            
+            // Remove temporary field
+            comment.remove('author_global');
           }
         }
       }
 
-      print('✅ Posts processed with local overrides (including comments)');
+      print('✅ Posts processed with local identity data');
       return Right(List<Map<String, dynamic>>.from(posts));
     } catch (e, stackTrace) {
       print('❌ Error fetching paginated wall posts: $e');

@@ -9,7 +9,7 @@ import '../../domain/entities/wall_post_comment.dart';
 class WallPostModel {
   /// Convert from Supabase JSON to WallPost entity
   static WallPost fromSupabase(Map<String, dynamic> json, String? currentUserId) {
-    // Extract author data from joined users_global table
+    // Extract author data from merged local/global profile
     final author = json['author'] as Map<String, dynamic>?;
     
     // Check if current user liked this post
@@ -38,13 +38,21 @@ class WallPostModel {
       commentsCount = commentsList.length;
     }
     
+    // Prioritize local identity: display_name (nickname) over username
+    final displayName = author?['display_name'] as String?;
+    final username = author?['username'] as String? ?? 'Usuario';
+    
+    // Prioritize local avatar over global avatar
+    final localAvatar = author?['avatar_url'] as String?;
+    final globalAvatar = author?['avatar_global_url'] as String?;
+    
     return WallPost(
       id: json['id'] as String,
       communityId: json['community_id'] as String?,
-      authorId: json['author_id'] as String,  // ✅ CORRECTED: use author_id, not profile_user_id
-      authorName: author?['username'] as String? ?? 'Usuario',
-      authorDisplayName: author?['display_name'] as String?,
-      authorAvatar: author?['avatar_global_url'] as String?,
+      authorId: json['author_id'] as String,
+      authorName: displayName ?? username,  // ✅ Prioritize nickname
+      authorDisplayName: displayName,
+      authorAvatar: localAvatar ?? globalAvatar,  // ✅ Prioritize local avatar
       content: json['content'] as String,
       timestamp: DateTime.parse(json['created_at'] as String),
       likes: json['likes_count'] as int? ?? 0,

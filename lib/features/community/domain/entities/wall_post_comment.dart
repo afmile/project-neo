@@ -90,7 +90,7 @@ class WallPostComment extends Equatable {
       ];
 
   factory WallPostComment.fromSupabase(Map<String, dynamic> json, String? currentUserId) {
-    // Author might be joined or passed directly
+    // Author data is merged from local/global profile by repository
     final author = json['author'] as Map<String, dynamic>?;
     
     // Check user likes
@@ -99,13 +99,21 @@ class WallPostComment extends Equatable {
         userLikes != null &&
         userLikes.any((like) => like['user_id'] == currentUserId);
 
+    // Prioritize local identity: display_name (nickname) over username
+    final displayName = author?['display_name'] as String?;
+    final username = author?['username'] as String? ?? 'Usuario';
+    
+    // Prioritize local avatar over global avatar
+    final localAvatar = author?['avatar_url'] as String?;
+    final globalAvatar = author?['avatar_global_url'] as String?;
+
     return WallPostComment(
       id: json['id'] as String,
       postId: json['post_id'] as String? ?? '', // Often not joined, but fallback
       authorId: json['author_id'] as String,
-      authorName: author?['username'] as String? ?? 'Usuario',
-      authorDisplayName: author?['display_name'] as String?, // Injected manually in Repository
-      authorAvatar: author?['avatar_global_url'] as String?,
+      authorName: displayName ?? username,  // ✅ Prioritize nickname
+      authorDisplayName: displayName,
+      authorAvatar: localAvatar ?? globalAvatar,  // ✅ Prioritize local avatar
       content: json['content'] as String,
       createdAt: DateTime.parse(json['created_at'] as String),
       likesCount: json['likes_count'] as int? ?? 0,
