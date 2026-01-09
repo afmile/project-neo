@@ -49,7 +49,12 @@ class LocalIdentity {
 final myLocalIdentityProvider = FutureProvider.family<LocalIdentity?, String>(
   (ref, communityId) async {
     final currentUser = ref.watch(currentUserProvider);
-    if (currentUser == null) return null;
+    if (currentUser == null) {
+      print('⚠️ [LOCAL IDENTITY] No current user');
+      return null;
+    }
+
+    print('🔍 [LOCAL IDENTITY] Fetching for communityId: $communityId, userId: ${currentUser.id}');
 
     final supabase = Supabase.instance.client;
 
@@ -58,20 +63,25 @@ final myLocalIdentityProvider = FutureProvider.family<LocalIdentity?, String>(
           .from('community_members')
           .select('''
             user_id, community_id, nickname, avatar_url, bio, role,
-            user:users_global(username, avatar_global_url)
+            users_global!community_members_user_id_fkey(username, avatar_global_url)
           ''')
           .eq('community_id', communityId)
           .eq('user_id', currentUser.id)
           .eq('is_active', true)
           .maybeSingle();
 
-      if (response == null) return null;
+      print('📦 [LOCAL IDENTITY] Response: $response');
 
-      final userData = response['user'] as Map<String, dynamic>?;
+      if (response == null) {
+        print('⚠️ [LOCAL IDENTITY] No member record found');
+        return null;
+      }
+
+      final userData = response['users_global'] as Map<String, dynamic>?;
       final globalUsername = userData?['username'] as String? ?? 'Usuario';
       final globalAvatar = userData?['avatar_global_url'] as String?;
 
-      return LocalIdentity(
+      final localIdentity = LocalIdentity(
         userId: response['user_id'] as String,
         communityId: response['community_id'] as String,
         displayName: response['nickname'] as String? ?? globalUsername,
@@ -79,8 +89,15 @@ final myLocalIdentityProvider = FutureProvider.family<LocalIdentity?, String>(
         bio: response['bio'] as String?,
         role: response['role'] as String? ?? 'member',
       );
+
+      print('✅ [LOCAL IDENTITY] Loaded:');
+      print('   - displayName: ${localIdentity.displayName}');
+      print('   - avatarUrl: ${localIdentity.avatarUrl}');
+      print('   - role: ${localIdentity.role}');
+
+      return localIdentity;
     } catch (e) {
-      print('❌ Error loading local identity: $e');
+      print('❌ [LOCAL IDENTITY] Error loading: $e');
       return null;
     }
   },

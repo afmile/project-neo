@@ -55,16 +55,20 @@ class _BentoPostComposerState extends State<BentoPostComposer> {
       final supabase = Supabase.instance.client;
       final userId = widget.currentUser.id;
       
+      print('🔍 [COMPOSER] Fetching local member for userId: $userId, communityId: ${widget.communityId}');
+      
       final response = await supabase
           .from('community_members')
           .select('''
             user_id, role, joined_at, nickname, avatar_url, is_leader, is_moderator,
-            users_global!inner(username, avatar_global_url)
+            users_global!community_members_user_id_fkey(username, avatar_global_url)
           ''')
           .eq('user_id', userId)
           .eq('community_id', widget.communityId)
           .eq('is_active', true)
           .maybeSingle();
+
+      print('📦 [COMPOSER] Response received: $response');
 
       if (response != null && mounted) {
         final userData = response['users_global'] as Map<String, dynamic>?;
@@ -73,6 +77,12 @@ class _BentoPostComposerState extends State<BentoPostComposer> {
 
         final displayName = response['nickname'] as String? ?? globalUsername;
         final displayAvatar = response['avatar_url'] as String? ?? globalAvatar;
+
+        print('📢 [COMPOSER] MEMBERSHIP LOADED:');
+        print('   - Nickname from DB: ${response['nickname']}');
+        print('   - Global username: $globalUsername');
+        print('   - Display name (resolved): $displayName');
+        print('   - Display avatar: $displayAvatar');
 
         setState(() {
           _currentMember = CommunityMember(
@@ -85,11 +95,14 @@ class _BentoPostComposerState extends State<BentoPostComposer> {
           );
           _isLoadingMember = false;
         });
+        
+        print('✅ [COMPOSER] UI UPDATED with local identity: $displayName');
       } else if (mounted) {
+        print('⚠️ [COMPOSER] No member data found, using global identity');
         setState(() => _isLoadingMember = false);
       }
     } catch (e) {
-      print('❌ Error fetching local member: $e');
+      print('❌ [COMPOSER] Error fetching local member: $e');
       if (mounted) {
         setState(() => _isLoadingMember = false);
       }

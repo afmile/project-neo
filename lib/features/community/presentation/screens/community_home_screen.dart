@@ -1159,21 +1159,39 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
     
     if (currentUser == null) return;
     
+    print('🔍 [COMPOSER MODAL] Opening composer...');
+    print('   Current user: ${currentUser.username} (${currentUser.id})');
+    
     // Get local identity and convert to CommunityMember for composer
     final localIdentity = ref.read(myLocalIdentityProvider(widget.community.id)).valueOrNull;
+    
+    print('📦 [COMPOSER MODAL] Local identity: $localIdentity');
+    if (localIdentity != null) {
+      print('   - displayName: ${localIdentity.displayName}');
+      print('   - avatarUrl: ${localIdentity.avatarUrl}');
+      print('   - role: ${localIdentity.role}');
+    } else {
+      print('   ⚠️  Local identity is NULL - will use global username');
+    }
+    
     CommunityMember? localProfile;
     
     if (localIdentity != null) {
       localProfile = CommunityMember(
         id: localIdentity.userId,
-        username: currentUser.username, // Global fallback
+        username: localIdentity.displayName, // ✅ Use local displayName (nickname or global username)
         nickname: localIdentity.displayName != currentUser.username 
             ? localIdentity.displayName 
-            : null, // Only set nickname if different from global
+            : null, // Set nickname field if different from global
         avatarUrl: localIdentity.avatarUrl,
         role: localIdentity.role,
         joinedAt: DateTime.now(),
       );
+      
+      print('✅ [COMPOSER MODAL] Created localProfile:');
+      print('   - username: ${localProfile.username}');
+      print('   - nickname: ${localProfile.nickname}');
+      print('   - avatarUrl: ${localProfile.avatarUrl}');
     }
     
     showModalBottomSheet(
