@@ -62,11 +62,12 @@ final communityMembersProvider = FutureProvider.family<List<CommunityMember>, St
       print('🔍 Fetching members for community: $communityId');
       
       // Fetch members with JOIN to users_global for fallback data
+      // Using explicit FK hint to avoid ambiguous join error
       final response = await supabase
           .from('community_members')
           .select('''
             user_id, role, joined_at, nickname, avatar_url, is_leader, is_moderator, is_active,
-            users_global!inner(username, avatar_global_url)
+            users_global!community_members_user_id_fkey(username, avatar_global_url)
           ''')
           .eq('community_id', communityId)
           .eq('is_active', true) // Only active members
