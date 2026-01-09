@@ -255,12 +255,12 @@ class _WallThreadsComposerSheetState extends State<WallThreadsComposerSheet>
       print('🟡 DEBUG: content: "${_textController.text.trim()}"');
       
       // Routing logic:
-      // - isFromCommunityWall = true → wall_posts (community public feed)
+      // - isFromCommunityWall = true → community_wall_posts (community public feed)
       // - isFromCommunityWall = false → profile_wall_posts (user profile wall)
       
       if (widget.isFromCommunityWall) {
-        // COMMUNITY WALL: Insert to wall_posts
-        print('🟢 DEBUG: Insertando en wall_posts (muro de comunidad)');
+        // COMMUNITY WALL: Insert to community_wall_posts
+        print('🟢 DEBUG: Insertando en community_wall_posts (muro de comunidad)');
         
         // Upload imágenes primero (si hay)
         List<String>? mediaUrls;
@@ -293,13 +293,13 @@ class _WallThreadsComposerSheetState extends State<WallThreadsComposerSheet>
           if (mediaUrls != null && mediaUrls.isNotEmpty) 'media_url': mediaUrls.first,
           if (mediaUrls != null && mediaUrls.isNotEmpty) 'media_type': 'image',
         };
-        print('🟡 DEBUG: Payload para wall_posts: $payload');
+        print('🟡 DEBUG: Payload para community_wall_posts: $payload');
         
         await Supabase.instance.client
             .from('community_wall_posts')
             .insert(payload);
         
-        print('🟢 DEBUG: Post insertado en wall_posts');
+        print('🟢 DEBUG: Post insertado en community_wall_posts');
       } else {
         // PROFILE WALL: Insert to profile_wall_posts
         print('🟢 DEBUG: Insertando en profile_wall_posts (muro de perfil)');
