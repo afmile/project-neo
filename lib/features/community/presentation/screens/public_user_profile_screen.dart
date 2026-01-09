@@ -1076,14 +1076,14 @@ class _PublicUserProfileScreenState
     
     try {
       // Parallel fetch for both users with JOIN to users_global
-      // This matches the query structure expected by CommunityMember.fromJson
+      // Using explicit foreign key hint to avoid ambiguous join error
       final results = await Future.wait([
         // Current user (author)
         supabase
             .from('community_members')
             .select('''
               user_id, role, joined_at, nickname, avatar_url,
-              user:users_global(username, avatar_global_url)
+              users_global!community_members_user_id_fkey(username, avatar_global_url)
             ''')
             .eq('user_id', currentUserId)
             .eq('community_id', widget.communityId)
@@ -1093,23 +1093,55 @@ class _PublicUserProfileScreenState
             .from('community_members')
             .select('''
               user_id, role, joined_at, nickname, avatar_url,
-              user:users_global(username, avatar_global_url)
+              users_global!community_members_user_id_fkey(username, avatar_global_url)
             ''')
             .eq('user_id', widget.userId)
             .eq('community_id', widget.communityId)
             .maybeSingle(),
       ]);
       
-      // Instantiate CommunityMember objects
+      print('🔍 [PROFILE COMPOSER] Fetched memberships:');
+      print('   Author (current user): ${results[0]}');
+      print('   Wall owner: ${results[1]}');
+      
+      // Map to CommunityMember objects with correct field mapping
       if (results[0] != null) {
-        localProfile = CommunityMember.fromJson(results[0] as Map<String, dynamic>);
+        final data = results[0] as Map<String, dynamic>;
+        final userData = data['users_global'] as Map<String, dynamic>?;
+        final globalUsername = userData?['username'] as String? ?? 'Usuario';
+        final globalAvatar = userData?['avatar_global_url'] as String?;
+        
+        localProfile = CommunityMember(
+          id: data['user_id'] as String,
+          username: data['nickname'] as String? ?? globalUsername, // ✅ Use nickname for display
+          nickname: data['nickname'] as String?,
+          avatarUrl: data['avatar_url'] as String? ?? globalAvatar,
+          role: data['role'] as String? ?? 'member',
+          joinedAt: DateTime.tryParse(data['joined_at'] as String? ?? '') ?? DateTime.now(),
+        );
+        
+        print('✅ [PROFILE COMPOSER] Author profile: ${localProfile.username}');
       }
       
       if (results[1] != null) {
-        wallOwnerProfile = CommunityMember.fromJson(results[1] as Map<String, dynamic>);
+        final data = results[1] as Map<String, dynamic>;
+        final userData = data['users_global'] as Map<String, dynamic>?;
+        final globalUsername = userData?['username'] as String? ?? 'Usuario';
+        final globalAvatar = userData?['avatar_global_url'] as String?;
+        
+        wallOwnerProfile = CommunityMember(
+          id: data['user_id'] as String,
+          username: data['nickname'] as String? ?? globalUsername, // ✅ Use nickname for display
+          nickname: data['nickname'] as String?,
+          avatarUrl: data['avatar_url'] as String? ?? globalAvatar,
+          role: data['role'] as String? ?? 'member',
+          joinedAt: DateTime.tryParse(data['joined_at'] as String? ?? '') ?? DateTime.now(),
+        );
+        
+        print('✅ [PROFILE COMPOSER] Wall owner profile: ${wallOwnerProfile.username}');
       }
     } catch (e) {
-      debugPrint('Error fetching local membership: $e');
+      debugPrint('❌ [PROFILE COMPOSER] Error fetching local membership: $e');
     }
     
     if (!mounted) return;
