@@ -108,7 +108,7 @@ class CommunityRemoteDataSourceImpl implements CommunityRemoteDataSource {
   Future<PostModel> createPost(PostModel post) async {
     try {
       final response = await _client
-          .from('community_posts')
+          .from('community_blogs')
           .insert(post.toInsertJson())
           .select('''
             *,

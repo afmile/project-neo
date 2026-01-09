@@ -98,12 +98,11 @@ class ContentRemoteDataSourceImpl implements ContentRemoteDataSource {
     int offset = 0,
   }) async {
     try {
-      // Build query with type filter
+      // Build query with type filter - use VIEW for local identity
       var query = _client
-          .from('community_posts')
+          .from('community_posts_view')
           .select('''
             *,
-            author:author_id (username, avatar_global_url),
             poll_options (id, text, position, votes_count)
           ''')
           .eq('community_id', communityId);
@@ -179,12 +178,11 @@ class ContentRemoteDataSourceImpl implements ContentRemoteDataSource {
     String? cursorId,
   }) async {
     try {
-      // Build base query
+      // Build base query - use VIEW for local identity
       var query = _client
-          .from('community_posts')
+          .from('community_posts_view')
           .select('''
             *,
-            author:author_id (username, avatar_global_url),
             poll_options (id, text, position, votes_count)
           ''')
           .eq('community_id', communityId);
@@ -275,10 +273,9 @@ class ContentRemoteDataSourceImpl implements ContentRemoteDataSource {
   Future<PostModel> getPostById(String postId) async {
     try {
       final response = await _client
-          .from('community_posts')
+          .from('community_posts_view')
           .select('''
             *,
-            author:author_id (username, avatar_global_url),
             poll_options (id, text, position, votes_count)
           ''')
           .eq('id', postId)
@@ -326,7 +323,7 @@ class ContentRemoteDataSourceImpl implements ContentRemoteDataSource {
   Future<PostModel> createPost(PostModel post) async {
     try {
       final response = await _client
-          .from('community_posts')
+          .from('community_blogs')
           .insert(post.toInsertJson())
           .select('''
             *,
@@ -346,7 +343,7 @@ class ContentRemoteDataSourceImpl implements ContentRemoteDataSource {
   Future<PostModel> updatePost(PostModel post) async {
     try {
       final response = await _client
-          .from('community_posts')
+          .from('community_blogs')
           .update(post.toJson())
           .eq('id', post.id)
           .select('''
@@ -368,7 +365,7 @@ class ContentRemoteDataSourceImpl implements ContentRemoteDataSource {
   Future<void> deletePost(String postId) async {
     try {
       await _client
-          .from('community_posts')
+          .from('community_blogs')
           .delete()
           .eq('id', postId);
     } on PostgrestException catch (e) {

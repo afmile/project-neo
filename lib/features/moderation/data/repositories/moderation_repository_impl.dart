@@ -133,7 +133,7 @@ class ModerationRepositoryImpl implements ModerationRepository {
   Future<void> hideWallPost(String postId) async {
     try {
       await _supabase
-          .from('wall_posts')
+          .from('community_wall_posts')
           .update({'is_hidden': true})
           .eq('id', postId);
     } catch (e) {
@@ -144,7 +144,7 @@ class ModerationRepositoryImpl implements ModerationRepository {
   @override
   Future<void> deleteWallPost(String postId) async {
     try {
-      await _supabase.from('wall_posts').delete().eq('id', postId);
+      await _supabase.from('community_wall_posts').delete().eq('id', postId);
     } catch (e) {
       throw Exception('Failed to delete wall post: $e');
     }
@@ -154,7 +154,7 @@ class ModerationRepositoryImpl implements ModerationRepository {
   Future<void> unhideWallPost(String postId) async {
     try {
       await _supabase
-          .from('wall_posts')
+          .from('community_wall_posts')
           .update({'is_hidden': false})
           .eq('id', postId);
     } catch (e) {

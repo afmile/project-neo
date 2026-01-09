@@ -296,7 +296,7 @@ class _WallThreadsComposerSheetState extends State<WallThreadsComposerSheet>
         print('🟡 DEBUG: Payload para wall_posts: $payload');
         
         await Supabase.instance.client
-            .from('wall_posts')
+            .from('community_wall_posts')
             .insert(payload);
         
         print('🟢 DEBUG: Post insertado en wall_posts');

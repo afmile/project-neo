@@ -5,8 +5,10 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../../auth/domain/entities/user_entity.dart';
+import '../providers/community_members_provider.dart';
 
 class BentoPostComposer extends StatefulWidget {
   final UserEntity currentUser;
@@ -34,14 +36,64 @@ class _BentoPostComposerState extends State<BentoPostComposer> {
   bool _isPosting = false;
   String? _selectedMediaPath;
   String? _selectedMediaType; // 'image' or 'gif'
+  CommunityMember? _currentMember; // Local community profile
+  bool _isLoadingMember = true;
 
   @override
   void initState() {
     super.initState();
+    // Fetch local community member profile
+    _fetchLocalMember();
     // Auto-focus
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
     });
+  }
+
+  Future<void> _fetchLocalMember() async {
+    try {
+      final supabase = Supabase.instance.client;
+      final userId = widget.currentUser.id;
+      
+      final response = await supabase
+          .from('community_members')
+          .select('''
+            user_id, role, joined_at, nickname, avatar_url, is_leader, is_moderator,
+            users_global!inner(username, avatar_global_url)
+          ''')
+          .eq('user_id', userId)
+          .eq('community_id', widget.communityId)
+          .eq('is_active', true)
+          .maybeSingle();
+
+      if (response != null && mounted) {
+        final userData = response['users_global'] as Map<String, dynamic>?;
+        final globalUsername = userData?['username'] as String? ?? 'Usuario';
+        final globalAvatar = userData?['avatar_global_url'] as String?;
+
+        final displayName = response['nickname'] as String? ?? globalUsername;
+        final displayAvatar = response['avatar_url'] as String? ?? globalAvatar;
+
+        setState(() {
+          _currentMember = CommunityMember(
+            id: response['user_id'] as String,
+            username: displayName,
+            nickname: response['nickname'] as String?,
+            avatarUrl: displayAvatar,
+            role: response['role'] as String? ?? 'member',
+            joinedAt: DateTime.tryParse(response['joined_at'] as String? ?? '') ?? DateTime.now(),
+          );
+          _isLoadingMember = false;
+        });
+      } else if (mounted) {
+        setState(() => _isLoadingMember = false);
+      }
+    } catch (e) {
+      print('❌ Error fetching local member: $e');
+      if (mounted) {
+        setState(() => _isLoadingMember = false);
+      }
+    }
   }
 
   @override
@@ -272,6 +324,10 @@ class _BentoPostComposerState extends State<BentoPostComposer> {
         ? 'Publicando en muro de perfil'
         : 'Publicando en muro de comunidad';
 
+    // Use local community identity if loaded, otherwise fallback to global
+    final displayName = _currentMember?.username ?? widget.currentUser.username;
+    final displayAvatar = _currentMember?.avatarUrl ?? widget.currentUser.avatarUrl;
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -279,14 +335,12 @@ class _BentoPostComposerState extends State<BentoPostComposer> {
         CircleAvatar(
           radius: 18,
           backgroundColor: NeoColors.accent.withValues(alpha: 0.15),
-          backgroundImage: widget.currentUser.avatarUrl != null &&
-                  widget.currentUser.avatarUrl!.isNotEmpty
-              ? NetworkImage(widget.currentUser.avatarUrl!)
+          backgroundImage: displayAvatar != null && displayAvatar.isNotEmpty
+              ? NetworkImage(displayAvatar)
               : null,
-          child: widget.currentUser.avatarUrl == null ||
-                  widget.currentUser.avatarUrl!.isEmpty
+          child: displayAvatar == null || displayAvatar.isEmpty
               ? Text(
-                  widget.currentUser.username[0].toUpperCase(),
+                  displayName[0].toUpperCase(),
                   style: const TextStyle(
                     color: NeoColors.accent,
                     fontWeight: FontWeight.w600,
@@ -302,13 +356,28 @@ class _BentoPostComposerState extends State<BentoPostComposer> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                widget.currentUser.username,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                ),
+              Row(
+                children: [
+                  Text(
+                    displayName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
+                  ),
+                  if (_isLoadingMember) ...[
+                    const SizedBox(width: 8),
+                    const SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ],
               ),
               const SizedBox(height: 2),
               Text(

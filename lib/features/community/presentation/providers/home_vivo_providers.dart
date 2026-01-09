@@ -98,10 +98,9 @@ final pinnedPostProvider = FutureProvider.family<PostEntity?, String>(
 
     try {
       final response = await supabase
-          .from('community_posts')
+          .from('community_posts_view')
           .select('''
             *,
-            author:author_id (username, avatar_global_url),
             poll_options (id, text, position, votes_count)
           ''')
           .eq('community_id', communityId)
@@ -152,10 +151,9 @@ final recentActivityProvider = FutureProvider.family<List<PostEntity>, String>(
 
     try {
       final response = await supabase
-          .from('community_posts')
+          .from('community_posts_view')
           .select('''
             *,
-            author:author_id (username, avatar_global_url),
             poll_options (id, text, position, votes_count)
           ''')
           .eq('community_id', communityId)

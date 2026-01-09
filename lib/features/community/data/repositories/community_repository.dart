@@ -590,41 +590,24 @@ class CommunityRepositoryImpl implements CommunityRepository {
     String? cursorId,
   }) async {
     try {
-      print('🔄 Fetching paginated wall posts for community: $communityId');
+      print('🔄 Fetching wall posts from SQL VIEW for community: $communityId');
 
-      // Build base query with LEFT JOIN to community_members for local identity
-      // Using LEFT JOIN ensures posts load even if member data is missing/inaccessible
+      // Query the VIEW instead of the raw table
       var query = _supabase
-          .from('wall_posts')
-          .select('''
-            *,
-            author_global:users_global!wall_posts_author_id_fkey(username, avatar_global_url),
-            author_local:community_members(user_id, community_id, nickname, avatar_url, is_leader, is_moderator),
-            user_likes:wall_post_likes(user_id),
-            wall_post_comments(
-              id,
-              content,
-              created_at,
-              author_id,
-              author_global:users_global(username, avatar_global_url),
-              user_likes:wall_post_comment_likes(user_id)
-            )
-          ''')
+          .from('v_community_wall_feed')
+          .select()
           .eq('community_id', communityId);
 
-      // Apply cursor if provided (compound cursor: created_at DESC, then id DESC)
+      // Apply cursor if provided
       if (cursorCreatedAt != null && cursorId != null) {
-        // Posts with created_at < cursor OR (created_at = cursor AND id < cursor_id)
         query = query.or(
           'created_at.lt.$cursorCreatedAt,'
           'and(created_at.eq.$cursorCreatedAt,id.lt.$cursorId)',
         );
       }
 
-      // Execute query with ordering
+      // Execute query
       final response = await query
-          .order('created_at', referencedTable: 'wall_post_comments', ascending: true)
-          .limit(1, referencedTable: 'wall_post_comments')
           .order('created_at', ascending: false)
           .order('id', ascending: false)
           .limit(limit);
@@ -636,152 +619,44 @@ class CommunityRepositoryImpl implements CommunityRepository {
         return const Right([]);
       }
 
-      print('📦 Fetched ${posts.length} posts');
+      print('📦 Fetched ${posts.length} posts from view');
 
-      // Extract post IDs and comment author IDs for batch fetching
-      final postIds = posts.map((p) => p['id'] as String).toList();
-      final commentAuthorIds = <String>{};
-      
-      for (final post in posts) {
-        final comments = post['wall_post_comments'] as List<dynamic>?;
-        if (comments != null) {
-          for (final c in comments) {
-            commentAuthorIds.add(c['author_id'] as String);
-          }
+      // Map directly (The view already has flat fields)
+      // CRITICAL: WallPostModel expects author.display_name for nickname
+      final processedPosts = posts.map((data) {
+        // Debug log to verify we are getting the right data
+        if (posts.indexOf(data) == 0) {
+          print('🔍 Sample Post Author from VIEW: ${data['display_name']}');
         }
-      }
-
-      final commentsCounts = <String, int>{};
-      final commentLocalProfiles = <String, Map<String, dynamic>>{};
-
-      // Parallel fetch: Comments counts AND Local Profiles for comment authors
-      await Future.wait([
-        // Fetch comments counts
-        Future(() async {
-          if (postIds.isNotEmpty) {
-            final commentsResponse = await _supabase
-                .from('wall_post_comments')
-                .select('post_id')
-                .inFilter('post_id', postIds);
-
-            for (final comment in commentsResponse as List) {
-              final postId = comment['post_id'] as String;
-              commentsCounts[postId] = (commentsCounts[postId] ?? 0) + 1;
-            }
-          }
-        }),
-        // Fetch local profiles for comment authors
-        Future(() async {
-          if (commentAuthorIds.isNotEmpty) {
-            final profilesResponse = await _supabase
-                .from('community_members')
-                .select('user_id, nickname, avatar_url, is_leader, is_moderator')
-                .eq('community_id', communityId)
-                .inFilter('user_id', commentAuthorIds.toList());
-
-            for (final profile in profilesResponse as List) {
-              commentLocalProfiles[profile['user_id']] = profile;
-            }
-          }
-        }),
-      ]);
-
-      // Process posts: merge local and global data, inject comments count
-      for (final post in posts) {
-        post['comments_count'] = commentsCounts[post['id']] ?? 0;
-
-        // 🔍 DEBUG: Log RAW member data to track fallback behavior
-        final rawMemberData = post['author_local'];
-        print('📝 Post ID: ${post['id']} - Author ID: ${post['author_id']}');
-        print('   RAW Member Data: $rawMemberData');
-        print('   Type: ${rawMemberData.runtimeType}');
-
-        // Merge post author data: prioritize local, fallback to global
-        final authorGlobal = post['author_global'] as Map<String, dynamic>?;
         
-        // Handle author_local which might be null, a single object, or a list
-        // CRITICAL: Must filter by community_id to get the correct membership
-        Map<String, dynamic>? authorLocal;
-        final authorLocalRaw = post['author_local'];
-        
-        if (authorLocalRaw is List) {
-          print('   ⚠️  Got List with ${authorLocalRaw.length} items - filtering by community_id: $communityId');
-          
-          // Filter by BOTH community_id AND user_id to get the exact membership
-          final filtered = authorLocalRaw.where((item) {
-            if (item is! Map<String, dynamic>) return false;
-            
-            final matchesCommunity = item['community_id'] == communityId;
-            final matchesUser = item['user_id'] == post['author_id'];
-            
-            print('      Item: community_id=${item['community_id']}, user_id=${item['user_id']} -> match=$matchesCommunity && $matchesUser');
-            
-            return matchesCommunity && matchesUser;
-          }).toList();
-          
-          authorLocal = filtered.isNotEmpty ? filtered.first as Map<String, dynamic>? : null;
-          print('   🔍 Filtered result: $authorLocal');
-          
-        } else if (authorLocalRaw is Map<String, dynamic>) {
-          print('   ✓ Got single Map object');
-          
-          // Verify it matches both the author_id AND community_id
-          final matchesCommunity = authorLocalRaw['community_id'] == communityId;
-          final matchesUser = authorLocalRaw['user_id'] == post['author_id'];
-          
-          if (matchesCommunity && matchesUser) {
-            authorLocal = authorLocalRaw;
-            print('   ✓ Map matches community and user');
-          } else {
-            print('   ✗ Map does NOT match (community: $matchesCommunity, user: $matchesUser)');
-          }
-        } else {
-          print('   ✗ Member data is NULL or unknown type');
-        }
-
-        print('   ✅ Resolved Local Profile: $authorLocal');
-        print('   🌍 Global Profile: $authorGlobal');
-
-        post['author'] = <String, dynamic>{
-          'username': authorGlobal?['username'] ?? 'Usuario',
-          'avatar_global_url': authorGlobal?['avatar_global_url'],
-          'display_name': authorLocal?['nickname'],
-          'avatar_url': authorLocal?['avatar_url'],
-          'is_leader': authorLocal?['is_leader'] ?? false,
-          'is_moderator': authorLocal?['is_moderator'] ?? false,
+        return <String, dynamic>{
+          'id': data['id'],
+          'community_id': data['community_id'],
+          'author_id': data['author_id'],
+          'content': data['content'],
+          'created_at': data['created_at'],
+          'media_url': data['media_url'],
+          'media_type': data['media_type'],
+          'comments_count': data['comments_count'] ?? 0,
+          'likes_count': data['likes_count'] ?? 0,
+          // Map view fields to the structure WallPostModel expects
+          'author': <String, dynamic>{
+            'id': data['author_id'],
+            'username': data['display_name'] ?? 'Unknown', // Fallback username
+            'display_name': data['display_name'], // ✅ Nickname from view
+            'avatar_url': data['display_avatar'], // ✅ Local avatar from view
+            'avatar_global_url': data['display_avatar'], // Fallback
+            'is_leader': data['is_leader'] ?? false,
+            'is_moderator': data['is_moderator'] ?? false,
+          },
+          'profile_user_id': null, // Community posts don't have profile_user_id
         };
+      }).toList();
 
-        // Remove temporary fields
-        post.remove('author_global');
-        post.remove('author_local');
-        
-        // Process comment authors: merge local and global data
-        final comments = post['wall_post_comments'] as List<dynamic>?;
-        if (comments != null) {
-          for (final comment in comments) {
-            final cAuthorId = comment['author_id'] as String;
-            final cAuthorGlobal = comment['author_global'] as Map<String, dynamic>?;
-            final cLocalProfile = commentLocalProfiles[cAuthorId];
-            
-            comment['author'] = <String, dynamic>{
-              'username': cAuthorGlobal?['username'] ?? 'Usuario',
-              'avatar_global_url': cAuthorGlobal?['avatar_global_url'],
-              'display_name': cLocalProfile?['nickname'],
-              'avatar_url': cLocalProfile?['avatar_url'],
-              'is_leader': cLocalProfile?['is_leader'] ?? false,
-              'is_moderator': cLocalProfile?['is_moderator'] ?? false,
-            };
-            
-            // Remove temporary field
-            comment.remove('author_global');
-          }
-        }
-      }
-
-      print('✅ Posts processed with local identity data');
-      return Right(List<Map<String, dynamic>>.from(posts));
+      print('✅ Posts processed from VIEW with local identities');
+      return Right(processedPosts);
     } catch (e, stackTrace) {
-      print('❌ Error fetching paginated wall posts: $e');
+      print('❌ Error fetching wall posts from view: $e');
       print('📍 Stack trace: $stackTrace');
       return Left(ServerFailure('Error cargando posts: $e'));
     }
@@ -812,10 +687,10 @@ class CommunityRepositoryImpl implements CommunityRepository {
         'content': content.trim(),
       };
       
-      print('📝 Insert wall_posts payload: $payload');
+      print('📝 Insert community_wall_posts payload: $payload');
       
       final response = await _supabase
-          .from('wall_posts')
+          .from('community_wall_posts')
           .insert(payload)
           .select('''
             *,
@@ -893,7 +768,7 @@ class CommunityRepositoryImpl implements CommunityRepository {
       
       // Delete the post (RLS should ensure only author can delete)
       await _supabase
-          .from('wall_posts')
+          .from('community_wall_posts')
           .delete()
           .eq('id', postId)
           .eq('author_id', userId); // Extra safety, though RLS should handle it

@@ -59,38 +59,53 @@ final communityMembersProvider = FutureProvider.family<List<CommunityMember>, St
     final supabase = Supabase.instance.client;
 
     try {
+      print('🔍 Fetching members for community: $communityId');
+      
       // Fetch members with JOIN to users_global for fallback data
       final response = await supabase
           .from('community_members')
           .select('''
-            user_id, role, joined_at, nickname, avatar_url,
-            user:users_global(username, avatar_global_url)
+            user_id, role, joined_at, nickname, avatar_url, is_leader, is_moderator, is_active,
+            users_global!inner(username, avatar_global_url)
           ''')
           .eq('community_id', communityId)
           .eq('is_active', true) // Only active members
+          .order('is_leader', ascending: false)
+          .order('is_moderator', ascending: false)
           .order('joined_at', ascending: false);
 
+      print('📦 Fetched ${(response as List).length} members');
+
       final members = (response as List).map((json) {
-        // Fallback Logic:
-        // 1. Local Community Nickname/Avatar
-        // 2. Global User Username/Avatar
-        // 3. Defaults
-        
-        final userData = json['user'] as Map<String, dynamic>?;
+        // Extract user data from the join
+        final userData = json['users_global'] as Map<String, dynamic>?;
         final globalUsername = userData?['username'] as String? ?? 'Usuario';
         final globalAvatar = userData?['avatar_global_url'] as String?;
 
+        // Resolve Local Identity with fallback to Global
+        final String displayName = json['nickname'] as String? ?? globalUsername;
+        final String? displayAvatar = json['avatar_url'] as String? ?? globalAvatar;
+
+        // Debug first member
+        if ((response as List).indexOf(json) == 0) {
+          print('🔍 Sample Member: $displayName (role: ${json['role']})');
+        }
+
         return CommunityMember(
           id: json['user_id'] as String,
-          username: json['nickname'] as String? ?? globalUsername, 
-          avatarUrl: json['avatar_url'] as String? ?? globalAvatar,
+          username: displayName, // ✅ Display local nickname or global username
+          nickname: json['nickname'] as String?, // Keep original nickname
+          avatarUrl: displayAvatar, // ✅ Display local avatar or global avatar
           role: json['role'] as String? ?? 'member',
           joinedAt: DateTime.tryParse(json['joined_at'] as String? ?? '') ?? DateTime.now(),
         );
       }).toList();
 
+      print('✅ Processed ${members.length} members with local identities');
       return members;
-    } catch (e) {
+    } catch (e, stack) {
+      print('🔴 Error fetching members: $e');
+      print('📍 Stack trace: $stack');
       // Return empty list on error
       return [];
     }

@@ -39,10 +39,10 @@ class ProfileRepositoryImpl implements ProfileRepository {
 
   @override
   Future<List<WallPost>> getGlobalProfilePosts(String userId) async {
-    // Queries the main 'wall_posts' table but strict filtering for NULL community_id
+    // Queries the main 'community_wall_posts' table but strict filtering for NULL community_id
     // This separates Global Profile posts from Community Wall posts.
     final response = await _client
-        .from('wall_posts')
+        .from('community_wall_posts')
         .select('''
           *,
           author:users_global!wall_posts_profile_user_id_fkey(username, avatar_global_url),
@@ -76,8 +76,8 @@ class ProfileRepositoryImpl implements ProfileRepository {
     final currentUser = _client.auth.currentUser;
     if (currentUser == null) throw Exception('No autenticado');
 
-    // Insert into 'wall_posts' with NULL community_id
-    await _client.from('wall_posts').insert({
+    // Insert into 'community_wall_posts' with NULL community_id
+    await _client.from('community_wall_posts').insert({
       'profile_user_id': userId,
       'community_id': null,
       'author_id': currentUser.id,
