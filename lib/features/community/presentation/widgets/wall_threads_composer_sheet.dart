@@ -526,11 +526,19 @@ class _WallThreadsComposerSheetState extends State<WallThreadsComposerSheet>
                                widget.wallOwnerProfile?.username ?? 
                                widget.profileUser.username;
     
-    final profileDisplayName = widget.isSelfProfile 
-        ? 'tu muro'
-        : 'el muro de $profileUserNickname';
-    
-    final contextText = 'Publicando en $profileDisplayName';
+    // Generate context text based on wall type
+    final String contextText;
+    if (widget.isFromCommunityWall) {
+      // Community wall composer
+      contextText = 'Publicando en el muro de la comunidad';
+    } else {
+      // Profile wall composer
+      if (widget.isSelfProfile) {
+        contextText = 'Publicando en tu muro';
+      } else {
+        contextText = 'Publicando en el muro de $profileUserNickname';
+      }
+    }
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
