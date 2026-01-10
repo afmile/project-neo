@@ -178,6 +178,9 @@ abstract class CommunityRepository {
   /// Fetch list of user IDs blocked by current user
   Future<Either<Failure, List<String>>> fetchBlockedUserIds();
 
+  /// Fetch blocked users with full details (username, avatar)
+  Future<Either<Failure, List<Map<String, dynamic>>>> fetchBlockedUsersWithDetails();
+
   /// Block a user (prevents seeing their content)
   Future<Either<Failure, void>> blockUser(String userId);
 
@@ -1411,6 +1414,30 @@ class CommunityRepositoryImpl implements CommunityRepository {
       return Right(blockedIds);
     } catch (e) {
       print('❌ Error fetching blocked users: $e');
+      return Left(ServerFailure('Error cargando usuarios bloqueados: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, List<Map<String, dynamic>>>> fetchBlockedUsersWithDetails() async {
+    try {
+      final userId = _currentUserId;
+      if (userId == null) {
+        return const Left(AuthFailure('Usuario no autenticado'));
+      }
+
+      print('🔍 Fetching blocked users with details for: $userId');
+
+      final response = await _supabase
+          .from('user_blocks')
+          .select('blocked_id, created_at, users_global!blocked_id(id, username, avatar_global_url)')
+          .eq('blocker_id', userId)
+          .order('created_at', ascending: false);
+
+      print('✅ Found ${(response as List).length} blocked users with details');
+      return Right(response as List<Map<String, dynamic>>);
+    } catch (e) {
+      print('❌ Error fetching blocked users with details: $e');
       return Left(ServerFailure('Error cargando usuarios bloqueados: $e'));
     }
   }

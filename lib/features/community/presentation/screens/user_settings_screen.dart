@@ -6,6 +6,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/neo_theme.dart';
+import '../../../profile/presentation/screens/blocked_users_screen.dart';
 import '../widgets/bento_card_widget.dart';
 
 class UserSettingsScreen extends StatelessWidget {
@@ -153,6 +154,24 @@ class UserSettingsScreen extends StatelessWidget {
                       'name': communityName,
                       'color': themeColor,
                     },
+                  );
+                },
+              ),
+              
+              const SizedBox(height: 12),
+              
+              // Usuarios Bloqueados
+              BentoCard(
+                icon: Icons.block,
+                title: 'Usuarios Bloqueados',
+                subtitle: 'Gestiona tu lista de bloqueos',
+                accentColor: const Color(0xFFFF6B6B), // Red
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const BlockedUsersScreen(),
+                    ),
                   );
                 },
               ),
