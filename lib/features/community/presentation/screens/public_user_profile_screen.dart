@@ -782,39 +782,60 @@ class _PublicUserProfileScreenState
             right: 0,
             left: 0,
             child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: member!.isFounder 
-                        ? [const Color(0xFFFFD700), const Color(0xFFFFA000)] 
-                        : member.isLeader 
-                            ? [const Color(0xFFBA68C8), const Color(0xFF9C27B0)]
-                            : [const Color(0xFF66BB6A), const Color(0xFF43A047)],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: member!.isFounder 
+                            ? [const Color(0xFFFFD700), const Color(0xFFFFA000)] 
+                            : member.isLeader 
+                                ? [const Color(0xFFBA68C8), const Color(0xFF9C27B0)]
+                                : [const Color(0xFF66BB6A), const Color(0xFF43A047)],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.black, width: 2),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black38, blurRadius: 4, offset: Offset(0, 2))
+                      ],
+                    ),
+                    child: Text(
+                      member.roleDisplayName.toUpperCase(), // "FUNDADOR", "LÍDER", "MOD"
+                      style: TextStyle(
+                        color: member.isFounder ? const Color(0xFF3E2723) : Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
                   ),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.black, width: 2),
-                  boxShadow: const [
-                    BoxShadow(color: Colors.black38, blurRadius: 4, offset: Offset(0, 2))
-                  ],
-                ),
-                child: Text(
-                  member.roleDisplayName.toUpperCase(), // "FUNDADOR", "LÍDER", "MOD"
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
-                  ),
-                ),
+
+                  // Staff-Specific Online Dot (Attached to Badge)
+                  if (isOnline)
+                    Positioned(
+                      bottom: -2,
+                      right: -4,
+                      child: Container(
+                        width: 12, // Slightly smaller for the badge context
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981), // Green
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.black, width: 2),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
 
-        // --- LAYER 3: The Online Dot (Universal if Online) ---
-        if (isOnline)
+        // --- LAYER 3: The Online Dot (Regular Users Only) ---
+        if (isOnline && !isStaff)
           Positioned(
             bottom: 2,
             right: 2,
