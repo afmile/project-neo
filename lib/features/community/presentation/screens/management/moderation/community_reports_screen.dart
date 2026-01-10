@@ -6,7 +6,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timeago/timeago.dart' as timeago;
-import '../../data/repositories/community_moderation_repository.dart';
+import '../../../../data/repositories/community_moderation_repository.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 // =============================================================================
