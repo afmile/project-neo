@@ -171,6 +171,9 @@ abstract class CommunityRepository {
     int limit = 50,
     int offset = 0,
   });
+
+  /// Fix missing memberships for communities owned by the user
+  Future<Either<Failure, int>> fixMissingMemberships();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1057,6 +1060,20 @@ class CommunityRepositoryImpl implements CommunityRepository {
             .eq('user_id', userId);
       } else {
         // Demotion: Immediate update, clear flags
+        // FIRST: Fetch current role to save it as previous_role
+        final currentMember = await _supabase
+            .from('community_members')
+            .select('role, is_leader, is_moderator') // Fetch is_leader, is_moderator
+            .eq('community_id', communityId)
+            .eq('user_id', userId)
+            .maybeSingle();
+
+        String? previousRole;
+        if (currentMember != null) {
+          if (currentMember['is_leader'] == true) previousRole = 'leader';
+          else if (currentMember['is_moderator'] == true) previousRole = 'moderator';
+        }
+
         await _supabase
             .from('community_members')
             .update({
@@ -1064,6 +1081,7 @@ class CommunityRepositoryImpl implements CommunityRepository {
               'is_leader': false,
               'is_moderator': false,
               'pending_role': null, // Clear any pending stuff
+              if (previousRole != null) 'previous_role': previousRole, // Save history
             })
             .eq('community_id', communityId)
             .eq('user_id', userId);
@@ -1100,6 +1118,7 @@ class CommunityRepositoryImpl implements CommunityRepository {
         'is_leader': false,
         'is_moderator': false,
         'pending_role': null, // Clear pending
+        'previous_role': null, // Clear history (active staff aren't 'previous')
       };
 
       if (pendingRole == 'leader') {
@@ -1226,6 +1245,71 @@ class CommunityRepositoryImpl implements CommunityRepository {
     }
   }
 
+  @override
+  Future<Either<Failure, int>> fixMissingMemberships() async {
+    try {
+      final userId = _currentUserId;
+      if (userId == null) return const Left(AuthFailure('Usuario no autenticado'));
+
+      print('🔧 Fixing missing memberships for user: $userId');
+
+      // 1. Get all communities owned by user
+      final ownedCommunities = await _supabase
+          .from('communities')
+          .select('id, title')
+          .eq('owner_id', userId);
+
+      int fixedCount = 0;
+
+      for (final c in ownedCommunities as List) {
+        final communityId = c['id'] as String;
+        
+        // 2. Check if member exists
+        final member = await _supabase
+            .from('community_members')
+            .select('user_id')
+            .eq('community_id', communityId)
+            .eq('user_id', userId)
+            .maybeSingle();
+
+        if (member == null) {
+          print('⚠️ Missing membership for owned community: ${c['title']} ($communityId). Restoration in progress...');
+          
+          // 3. Restore membership as Owner
+          // Use upsert to be safe
+          final userGlobal = await _supabase
+              .from('users_global')
+              .select('username, avatar_global_url, bio')
+              .eq('id', userId)
+              .single();
+
+          await _supabase.from('community_members').upsert({
+            'user_id': userId,
+            'community_id': communityId,
+            'role': 'owner',
+            'is_leader': true, 
+            'is_moderator': true,
+            'is_active': true,
+            'nickname': userGlobal['username'],
+            'avatar_url': userGlobal['avatar_global_url'],
+            'bio': userGlobal['bio'],
+            'joined_at': DateTime.now().toIso8601String(), // Or original date if we knew it
+          });
+          
+          fixedCount++;
+          print('✅ Restored membership for ${c['title']}');
+        }
+      }
+
+      print('🔧 Fix complete. Restored $fixedCount memberships.');
+      return Right(fixedCount);
+
+    } catch (e) {
+      print('❌ Error fixing memberships: $e');
+      return Left(ServerFailure('Error reparando membresías: $e'));
+    }
+  }
+
 
   // ═══════════════════════════════════════════════════════════════════════════
   // HELPERS
@@ -1254,7 +1338,15 @@ class CommunityRepositoryImpl implements CommunityRepository {
       updatedAt: DateTime.parse(
         json['updated_at'] as String? ?? json['created_at'] as String,
       ),
+      currentUserRole: _extractRole(json['community_members']),
     );
+  }
+
+  String? _extractRole(dynamic members) {
+    if (members is List && members.isNotEmpty) {
+      return members.first['role'] as String?;
+    }
+    return null;
   }
 
   CommunityStatus _parseStatus(String? status) {

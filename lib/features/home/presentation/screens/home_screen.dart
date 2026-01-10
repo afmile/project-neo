@@ -31,6 +31,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void initState() {
     super.initState();
     _searchFocusNode.addListener(_onSearchFocusChange);
+    // Auto-fix missing memberships for owned communities
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(communityRepositoryProvider).fixMissingMemberships().then((result) {
+        result.fold(
+          (l) => print('❌ Auto-fix failed: ${l.message}'),
+          (count) {
+            if (count > 0) {
+              print('✅ Auto-fixed $count missing memberships');
+              ref.invalidate(userCommunitiesProvider); // Refresh list
+            }
+          },
+        );
+      });
+    });
   }
 
   @override
@@ -386,48 +400,93 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildMyCommunities() {
-    // Use real Supabase data via userCommunitiesProvider
     final communitiesAsync = ref.watch(userCommunitiesProvider);
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: NeoSpacing.md),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Mis Comunidades',
-                style: NeoTextStyles.headlineMedium,
-              ),
-              // "Ver todas" button - only visible when data is loaded and not empty
-              ...communitiesAsync.whenOrNull(
-                data: (communities) => communities.isNotEmpty ? [
+
+    return communitiesAsync.when(
+      loading: () => _buildCommunitiesLoading(),
+      error: (error, _) => _buildCommunitiesError(error.toString()),
+      data: (communities) {
+        if (communities.isEmpty) return _buildEmptyState();
+
+        final managedCommunities = communities.where((c) => c.isStaff).toList();
+        final joinedCommunities = communities.where((c) => !c.isStaff).toList();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Main Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: NeoSpacing.md),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Mis Comunidades',
+                    style: NeoTextStyles.headlineMedium,
+                  ),
                   TextButton(
                     onPressed: () {},
                     child: Text(
-                      'Ver todas',
+                      'Ver todas (${communities.length})',
                       style: NeoTextStyles.labelMedium.copyWith(
                         color: NeoColors.accent,
                       ),
                     ),
                   ),
-                ] : null,
-              ) ?? [],
+                ],
+              ),
+            ),
+            const SizedBox(height: NeoSpacing.sm),
+
+            // Section 1: Managed Communities
+            if (managedCommunities.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: NeoSpacing.md),
+                child: Row(
+                  children: [
+                    Icon(Icons.shield_outlined, size: 16, color: NeoColors.accent),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Administrando',
+                      style: NeoTextStyles.labelLarge.copyWith(
+                        color: NeoColors.textSecondary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: NeoSpacing.xs),
+              _buildCommunityList(managedCommunities),
+              const SizedBox(height: NeoSpacing.md),
             ],
-          ),
-        ),
-        const SizedBox(height: NeoSpacing.sm),
-        
-        communitiesAsync.when(
-          loading: () => _buildCommunitiesLoading(),
-          error: (error, _) => _buildCommunitiesError(error.toString()),
-          data: (communities) => communities.isEmpty
-              ? _buildEmptyState()
-              : _buildCommunityList(communities),
-        ),
-      ],
+
+            // Section 2: Joined Communities
+            if (joinedCommunities.isNotEmpty) ...[
+              if (managedCommunities.isNotEmpty) ...[
+                 Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: NeoSpacing.md),
+                  child: Row(
+                    children: [
+                      Icon(Icons.group_outlined, size: 16, color: NeoColors.textSecondary),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Membresías',
+                        style: NeoTextStyles.labelLarge.copyWith(
+                          color: NeoColors.textSecondary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: NeoSpacing.xs),
+              ],
+              _buildCommunityList(joinedCommunities),
+            ],
+          ],
+        );
+      },
     );
   }
   
