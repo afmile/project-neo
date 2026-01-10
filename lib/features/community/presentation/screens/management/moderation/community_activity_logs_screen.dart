@@ -6,8 +6,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timeago/timeago.dart' as timeago;
-import '../../../../../core/theme/neo_theme.dart';
-import '../../../data/repositories/community_moderation_repository.dart';
+import '../../data/repositories/community_moderation_repository.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 // =============================================================================
@@ -163,7 +162,7 @@ class _CommunityActivityLogsScreenState extends ConsumerState<CommunityActivityL
                   );
                 },
                 loading: () => const Center(
-                  child: CircularProgressIndicator(color: NeoColors.accent),
+                  child: CircularProgressIndicator(color: Color(0xFF3B82F6)),
                 ),
                 error: (error, _) => Center(
                   child: Column(

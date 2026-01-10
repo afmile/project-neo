@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'report_content_dialog.dart';
 import '../../data/repositories/community_repository.dart';
+import '../providers/community_providers.dart';
 
 /// Shows a bottom sheet with post options
 ///

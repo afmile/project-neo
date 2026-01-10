@@ -5,7 +5,6 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/theme/neo_theme.dart';
 import '../../data/repositories/community_moderation_repository.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -165,7 +164,7 @@ class _ReportContentDialogState extends ConsumerState<ReportContentDialog> {
                 reason['label']!,
                 style: const TextStyle(color: Colors.white, fontSize: 14),
               ),
-              activeColor: NeoColors.accent,
+              activeColor: const Color(0xFF3B82F6),
               contentPadding: EdgeInsets.zero,
               dense: true,
             )),
@@ -182,7 +181,7 @@ class _ReportContentDialogState extends ConsumerState<ReportContentDialog> {
                 hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
                 filled: true,
                 fillColor: Colors.black.withOpacity(0.3),
-                border: OutlinedBorder(
+                border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
                 ),
