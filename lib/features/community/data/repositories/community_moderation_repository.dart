@@ -172,6 +172,16 @@ abstract class CommunityModerationRepository {
     required String entityType, // 'post' or 'comment'
     required String entityId,
   });
+
+  /// Create a user-generated report (regular users)
+  Future<Either<Failure, void>> createUserReport({
+    required String communityId,
+    required String accusedId,
+    String? postId,
+    String? commentId,
+    required String reason,
+    String? description,
+  });
 }
 
 // =============================================================================
@@ -368,6 +378,51 @@ class CommunityModerationRepositoryImpl implements CommunityModerationRepository
     } catch (e) {
       print('❌ Error deleting content: $e');
       return Left(ServerFailure('Error borrando contenido: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> createUserReport({
+    required String communityId,
+    required String accusedId,
+    String? postId,
+    String? commentId,
+    required String reason,
+    String? description,
+  }) async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) {
+        return const Left(AuthFailure('Usuario no autenticado'));
+      }
+
+      print('📝 Creating user report from $userId against $accusedId');
+
+      // Validate that at least one content target is provided
+      if (postId == null && commentId == null) {
+        return const Left(ValidationFailure('Debe especificar un post o comentario'));
+      }
+
+      await _supabase.from('community_reports').insert({
+        'community_id': communityId,
+        'reporter_id': userId, // User-generated report
+        'accused_id': accusedId,
+        'post_id': postId,
+        'comment_id': commentId,
+        'reason': reason,
+        'description': description,
+        'priority': 'normal', // User reports start as normal priority
+        'status': 'pending',
+      });
+
+      print('✅ User report created successfully');
+      return const Right(null);
+    } on PostgrestException catch (e) {
+      print('❌ Postgres error creating user report: ${e.message}');
+      return Left(ServerFailure('Error creando reporte: ${e.message}'));
+    } catch (e) {
+      print('❌ Error creating user report: $e');
+      return Left(ServerFailure('Error creando reporte: $e'));
     }
   }
 }
