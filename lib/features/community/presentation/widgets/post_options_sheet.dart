@@ -5,7 +5,10 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../../core/widgets/community_report_modal.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'report_content_dialog.dart';
+import '../../data/repositories/community_repository.dart';
 
 /// Shows a bottom sheet with post options
 ///
@@ -42,7 +45,7 @@ void showPostOptionsSheet(
 }
 
 
-class _PostOptionsSheet extends StatelessWidget {
+class _PostOptionsSheet extends ConsumerWidget {
   final String content;
   final bool showDelete;
   final VoidCallback? onDelete;
@@ -75,8 +78,19 @@ class _PostOptionsSheet extends StatelessWidget {
     return communityId != null && authorId != null;
   }
 
+  /// Check if block option should be shown
+  bool get _canShowBlock {
+    // Don't show block if user is author
+    if (currentUserId != null && authorId != null && currentUserId == authorId) {
+      return false;
+    }
+    return authorId != null;
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final repository = ref.watch(communityRepositoryProvider);
+
     return Container(
       decoration: const BoxDecoration(
         color: Color(0xFF1C2229), // Dark Grey
@@ -166,15 +180,62 @@ class _PostOptionsSheet extends StatelessWidget {
             },
           ),
           
-          _buildMenuItem(
-            context: context,
-            icon: Icons.block,
-            label: 'Bloquear cuenta',
-            onTap: () {
-              Navigator.of(context).pop();
-              // TODO: Implement block account functionality
-            },
-          ),
+          // Block account (hide if user is author)
+          if (_canShowBlock)
+            _buildMenuItem(
+              context: context,
+              icon: Icons.block,
+              label: 'Bloquear cuenta',
+              onTap: () async {
+                Navigator.of(context).pop();
+                
+                // Show confirmation dialog
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    backgroundColor: const Color(0xFF1E293B),
+                    title: const Text('Bloquear usuario', style: TextStyle(color: Colors.white)),
+                    content: const Text(
+                      '¿Estás seguro de que deseas bloquear a este usuario? No verás su contenido.',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancelar'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style: TextButton.styleFrom(foregroundColor: Colors.orange),
+                        child: const Text('Bloquear'),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (confirmed == true && context.mounted) {
+                  final result = await repository.blockUser(authorId!);
+                  
+                  if (context.mounted) {
+                    result.fold(
+                      (failure) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error: ${failure.message}')),
+                        );
+                      },
+                      (_) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Usuario bloqueado. No verás su contenido.'),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                      },
+                    );
+                  }
+                }
+              },
+            ),
           
           // Delete item (if author)
           if (showDelete && onDelete != null)
@@ -198,12 +259,14 @@ class _PostOptionsSheet extends StatelessWidget {
               isDestructive: true,
               onTap: () {
                 Navigator.of(context).pop();
-                showCommunityReportModal(
+                showDialog(
                   context: context,
-                  communityId: communityId!,
-                  accusedId: authorId!,
-                  postId: postId,
-                  commentId: commentId,
+                  builder: (context) => ReportContentDialog(
+                    communityId: communityId!,
+                    accusedId: authorId!,
+                    postId: postId,
+                    commentId: commentId,
+                  ),
                 );
               },
             ),
