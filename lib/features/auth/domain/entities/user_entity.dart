@@ -40,6 +40,9 @@ class UserEntity extends Equatable {
   /// VIP expiry date (if VIP)
   final DateTime? vipExpiry;
   
+  /// Whether user is a global administrator (can access all communities)
+  final bool isGlobalAdmin;
+  
   /// When the user was created
   final DateTime createdAt;
   
@@ -55,6 +58,7 @@ class UserEntity extends Equatable {
     this.neocoinsBalance = 0,
     this.isVip = false,
     this.vipExpiry,
+    this.isGlobalAdmin = false,
     required this.createdAt,
   });
   
@@ -93,6 +97,7 @@ class UserEntity extends Equatable {
     double? neocoinsBalance,
     bool? isVip,
     DateTime? vipExpiry,
+    bool? isGlobalAdmin,
     DateTime? createdAt,
   }) {
     return UserEntity(
@@ -107,6 +112,7 @@ class UserEntity extends Equatable {
       neocoinsBalance: neocoinsBalance ?? this.neocoinsBalance,
       isVip: isVip ?? this.isVip,
       vipExpiry: vipExpiry ?? this.vipExpiry,
+      isGlobalAdmin: isGlobalAdmin ?? this.isGlobalAdmin,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -124,6 +130,7 @@ class UserEntity extends Equatable {
     neocoinsBalance,
     isVip,
     vipExpiry,
+    isGlobalAdmin,
     createdAt,
   ];
 }

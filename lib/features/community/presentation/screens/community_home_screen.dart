@@ -207,8 +207,8 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
           communityId: widget.community.id,
           iconColor: Colors.white,
         ),
-        // Settings (visible to all leaders, not just owners)
-        if (_isLeader())
+        // Settings (visible to global admins, leaders, and moderators)
+        if (_canAccessManagement())
           IconButton(
             icon: Icon(
               Icons.settings,
@@ -2481,6 +2481,33 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
       loading: () => false,
       error: (_, __) => false,
     );
+  }
+
+  /// Check if current user is a moderator
+  bool _isModerator() {
+    final localIdentity = ref.read(myLocalIdentityProvider(widget.community.id));
+    return localIdentity.when(
+      data: (identity) {
+        if (identity == null) return false;
+        final role = identity.role?.toLowerCase() ?? '';
+        return role == 'moderator';
+      },
+      loading: () => false,
+      error: (_, __) => false,
+    );
+  }
+
+  /// Check if user can access management tools
+  /// True for: global admins (any community) OR local staff (owner/leader/moderator)
+  bool _canAccessManagement() {
+    // Global admins can access ANY community
+    final currentUser = ref.read(authProvider).user;
+    if (currentUser?.isGlobalAdmin == true) {
+      return true;
+    }
+
+    // Local staff (owner, leader, moderator)
+    return _isLeader() || _isModerator();
   }
 
   /// Navigate to Neo Studio (admin panel)

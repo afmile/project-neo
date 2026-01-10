@@ -44,6 +44,7 @@ class UserModel extends UserEntity {
       vipExpiry: wallet?['vip_expiry'] != null 
           ? DateTime.parse(wallet!['vip_expiry']) 
           : null,
+      isGlobalAdmin: userGlobal?['is_global_admin'] ?? false,
       createdAt: userGlobal?['created_at'] != null
           ? DateTime.parse(userGlobal!['created_at'])
           : DateTime.now(),
@@ -66,6 +67,7 @@ class UserModel extends UserEntity {
       vipExpiry: json['vip_expiry'] != null 
           ? DateTime.parse(json['vip_expiry']) 
           : null,
+      isGlobalAdmin: json['is_global_admin'] ?? false,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : DateTime.now(),
@@ -86,6 +88,7 @@ class UserModel extends UserEntity {
       'neocoins_balance': neocoinsBalance,
       'is_vip': isVip,
       'vip_expiry': vipExpiry?.toIso8601String(),
+      'is_global_admin': isGlobalAdmin,
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -104,6 +107,7 @@ class UserModel extends UserEntity {
       neocoinsBalance: entity.neocoinsBalance,
       isVip: entity.isVip,
       vipExpiry: entity.vipExpiry,
+      isGlobalAdmin: entity.isGlobalAdmin,
       createdAt: entity.createdAt,
     );
   }
