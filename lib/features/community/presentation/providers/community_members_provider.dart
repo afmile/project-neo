@@ -14,6 +14,11 @@ class CommunityMember {
   final String? avatarUrl;    // Can be local or global
   final String role;
   final DateTime joinedAt;
+  
+  // Role badges
+  final bool isFounder;       // owner role
+  final bool isLeader;        // is_leader from DB
+  final bool isModerator;     // is_moderator from DB
 
   const CommunityMember({
     required this.id,
@@ -22,11 +27,15 @@ class CommunityMember {
     this.avatarUrl,
     required this.role,
     required this.joinedAt,
+    this.isFounder = false,
+    this.isLeader = false,
+    this.isModerator = false,
   });
 
   factory CommunityMember.fromJson(Map<String, dynamic> json) {
     // Parse nested user object from JOIN query
     final userObj = json['user'] as Map<String, dynamic>?;
+    final role = json['role'] as String? ?? 'member';
     
     return CommunityMember(
       id: json['user_id'] as String,
@@ -34,8 +43,11 @@ class CommunityMember {
       nickname: json['nickname'] as String?,
       avatarUrl: json['avatar_url'] as String? ?? 
                 userObj?['avatar_global_url'] as String?,
-      role: json['role'] as String? ?? 'member',
+      role: role,
       joinedAt: DateTime.tryParse(json['joined_at'] as String? ?? '') ?? DateTime.now(),
+      isFounder: role == 'owner',
+      isLeader: json['is_leader'] as bool? ?? false,
+      isModerator: json['is_moderator'] as bool? ?? false,
     );
   }
 
@@ -86,10 +98,11 @@ final communityMembersProvider = FutureProvider.family<List<CommunityMember>, St
         // Resolve Local Identity with fallback to Global
         final String displayName = json['nickname'] as String? ?? globalUsername;
         final String? displayAvatar = json['avatar_url'] as String? ?? globalAvatar;
+        final String role = json['role'] as String? ?? 'member';
 
         // Debug first member
         if ((response as List).indexOf(json) == 0) {
-          print('🔍 Sample Member: $displayName (role: ${json['role']})');
+          print('🔍 Sample Member: $displayName (role: $role)');
         }
 
         return CommunityMember(
@@ -97,8 +110,11 @@ final communityMembersProvider = FutureProvider.family<List<CommunityMember>, St
           username: displayName, // ✅ Display local nickname or global username
           nickname: json['nickname'] as String?, // Keep original nickname
           avatarUrl: displayAvatar, // ✅ Display local avatar or global avatar
-          role: json['role'] as String? ?? 'member',
+          role: role,
           joinedAt: DateTime.tryParse(json['joined_at'] as String? ?? '') ?? DateTime.now(),
+          isFounder: role == 'owner',
+          isLeader: json['is_leader'] as bool? ?? false,
+          isModerator: json['is_moderator'] as bool? ?? false,
         );
       }).toList();
 

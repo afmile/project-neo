@@ -563,9 +563,6 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
           _buildDestacadoSection(),
           // 3. "Actividad reciente" - Recent posts
           _buildActividadRecienteSection(),
-          const SizedBox(height: 24),
-          // 4. "Tu identidad aquí" - Local identity
-          _buildIdentidadLocalSection(),
         ],
       ),
     );
@@ -1012,51 +1009,7 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
     );
   }
 
-  /// Section: "Tu identidad aquí" - Local identity card
-  Widget _buildIdentidadLocalSection() {
-    final identityAsync = ref.watch(
-      myLocalIdentityProvider(widget.community.id),
-    );
 
-    return identityAsync.when(
-      loading: () => const SizedBox.shrink(),
-      error: (error, stack) => const SizedBox.shrink(),
-      data: (identity) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Section Header
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                '👤 Tu identidad aquí',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            // Identity card
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: IdentityCard(
-                identity: identity,
-                onTap: () {
-                  // Navigate to local identity screen
-                  context.goNamed(
-                    'local-identity',
-                    pathParameters: {'communityId': widget.community.id},
-                  );
-                },
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // LEGACY TAB METHODS

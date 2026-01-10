@@ -58,7 +58,10 @@ class _PublicUserProfileScreenState
   String? _staffRole;
   List<CommunityTitle> _titles = [];
   int _followersCount = 0;
+
   int _followingCount = 0;
+  
+  CommunityMember? _currentMemberProfile;
 
   @override
   void initState() {
@@ -295,6 +298,15 @@ class _PublicUserProfileScreenState
         setState(() {
           _user = userEntity;
           _communityRole = role;
+          
+          // Create CommunityMember object for UI badges
+          if (membershipResponse != null) {
+            // Inject user data for fallback
+            if (userResponse != null) {
+              membershipResponse['user'] = userResponse;
+            }
+            _currentMemberProfile = CommunityMember.fromJson(membershipResponse);
+          }
         });
       }
 
@@ -575,7 +587,7 @@ class _PublicUserProfileScreenState
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
-            child: _buildNewHeader(_user!, isOwnProfile),
+            child: _buildNewHeader(_user!, isOwnProfile, _currentMemberProfile),
           ),
           
           _buildTabBar(),
@@ -620,215 +632,266 @@ class _PublicUserProfileScreenState
     );
   }
 
-  Widget _buildNewHeader(UserEntity user, bool isOwnProfile) {
-    return Column(
-      children: [
-        Padding(
-          padding: EdgeInsets.only(
-            top: MediaQuery.of(context).padding.top + 8,
-            left: 16,
-            right: 16,
-            bottom: 16,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              InkWell(
-                onTap: () => Navigator.of(context).pop(),
-                borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
-                ),
-              ),
+  Widget _buildRoleBadge(CommunityMember member) {
+    String? label;
+    Color bgColor = Colors.transparent;
+    
+    // Priority 1: Founder
+    if (member.isFounder) {
+      label = "👑 Fundador";
+      bgColor = const Color(0xFFFFD700); // Gold
+    } 
+    // Priority 2: Leader (if not founder but has leader flag)
+    else if (member.isLeader) {
+      label = "🛡️ Líder";
+      bgColor = const Color(0xFF9C27B0); // Amino Purple
+    } 
+    // Priority 3: Moderator
+    else if (member.isModerator) {
+      label = "⚔️ Moderador";
+      bgColor = const Color(0xFF4CAF50); // Green
+    }
 
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF3F2E00),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: const Color(0xFFCA8A04).withValues(alpha: 0.5),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.monetization_on, color: Color(0xFFEAB308), size: 16),
-                        const SizedBox(width: 6),
-                        Text(
-                          user.neocoinsBalance.toInt().toString(),
-                          style: const TextStyle(
-                            color: Color(0xFFEAB308),
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  InkWell(
-                    onTap: () => isOwnProfile ? _showProfileMenu(context) : null,
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.more_vert, color: Colors.white, size: 24),
-                    ),
-                  ),
-                ],
-              ),
+    if (label == null) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(20), // Pill shape
+        boxShadow: const [
+          BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))
+        ]
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+      ),
+    );
+  }
+
+  Widget _buildNewHeader(UserEntity user, bool isOwnProfile, CommunityMember? memberProfile) {
+    // Amino-Style Hero Layout
+    final double coverHeight = 180;
+    final double avatarSize = 110;
+    
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // 1. Cover Image Background
+        Container(
+          height: coverHeight,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                 NeoColors.card.withValues(alpha: 0.8),
+                 NeoColors.accent.withValues(alpha: 0.6),
+              ],
+            ),
+          ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+               // Pattern or Placeholder texture could go here
+               Container(color: Colors.black.withValues(alpha: 0.2)),
             ],
           ),
         ),
 
-        Stack(
-          alignment: Alignment.center,
+        // 2. Main Content (Avatar + Info)
+        Column(
           children: [
-            Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: NeoColors.accent.withValues(alpha: 0.4),
-              ),
-            ).animate(onPlay: (controller) => controller.repeat(reverse: true))
-             .scale(begin: const Offset(1, 1), end: const Offset(1.1, 1.1), duration: 2000.ms)
-             .then()
-             .scale(begin: const Offset(1.1, 1.1), end: const Offset(1, 1), duration: 2000.ms),
+            SizedBox(height: coverHeight - (avatarSize / 2)),
             
-            Container(
-              width: 112,
-              height: 112,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: NeoColors.accent, width: 4),
-                boxShadow: [
-                   BoxShadow(
-                     color: NeoColors.accent.withValues(alpha: 0.5),
-                     blurRadius: 20,
-                     spreadRadius: 0,
-                   )
+            // Avatar Centered & Overlapping
+            Center(
+               child: Stack(
+                 alignment: Alignment.center,
+                 children: [
+                   Container(
+                     width: avatarSize + 8,
+                     height: avatarSize + 8,
+                     decoration: const BoxDecoration(
+                       shape: BoxShape.circle,
+                       color: Colors.black, // Border color matching bg
+                     ),
+                   ),
+                   // Avatar Pulse Animation (optional/subtle)
+                   Container(
+                      width: avatarSize,
+                      height: avatarSize,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                         color: Color(0xFF1F2937),
+                      ),
+                      child: ClipOval(
+                        child: user.avatarUrl != null
+                            ? Image.network(
+                                user.avatarUrl!,
+                                fit: BoxFit.cover,
+                              )
+                            : Center(
+                                child: Text(
+                                  user.username[0].toUpperCase(),
+                                  style: const TextStyle(
+                                    fontSize: 40,
+                                    color: NeoColors.accent,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                      ),
+                   ).animate().scale(
+                     duration: 400.ms, 
+                     curve: Curves.easeOutBack,
+                     begin: const Offset(0.8, 0.8),
+                   ),
+                   
+                   // Online Status Dot (if needed later)
+                 ],
+               ),
+            ),
+            
+            const SizedBox(height: 12),
+            
+            // Nickname
+            Text(
+              memberProfile?.nickname ?? user.username,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 26,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.5,
+                shadows: [
+                  Shadow(color: Colors.black45, blurRadius: 8, offset: Offset(0, 2)),
                 ],
               ),
-              child: ClipOval(
-                child: user.avatarUrl != null
-                    ? Image.network(
-                        user.avatarUrl!,
-                        fit: BoxFit.cover,
-                      )
-                    : Container(
-                        color: const Color(0xFF1F2937),
-                        child: Center(
-                          child: Text(
-                            user.username[0].toUpperCase(),
-                            style: const TextStyle(
-                              fontSize: 40,
-                              color: NeoColors.accent,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-              ),
             ),
-          ],
-        ),
+            
+            // Role Badge (Pill)
+            if (memberProfile != null)
+              _buildRoleBadge(memberProfile),
 
-        const SizedBox(height: 16),
-
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-             Text(
-               user.username,
-               style: const TextStyle(
-                 color: Colors.white,
-                 fontSize: 24,
-                 fontWeight: FontWeight.bold,
-                 letterSpacing: -0.5,
-               ),
-             ),
-             const SizedBox(width: 8),
+             // Existing Level Badge (Optional, keeping for now if user wants)
+             /*
+             const SizedBox(height: 8),
              Container(
                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                decoration: BoxDecoration(
                  color: const Color(0xFF312E81).withValues(alpha: 0.6),
                  borderRadius: BorderRadius.circular(4),
-                 border: Border.all(
-                   color: const Color(0xFF4338CA).withValues(alpha: 0.5),
-                 ),
+                 border: Border.all(color: const Color(0xFF4338CA).withValues(alpha: 0.5)),
                ),
-               child: const Text(
-                 'Nv 5',
-                 style: TextStyle(
-                   color: Color(0xFFA5B4FC),
-                   fontSize: 12,
-                   fontWeight: FontWeight.w600,
-                 ),
-               ),
+               child: const Text('Nv 5', style: TextStyle(color: Color(0xFFA5B4FC), fontSize: 12)),
              ),
-          ],
-        ),
+             */
 
-        const SizedBox(height: 12),
+            const SizedBox(height: 16),
 
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _buildStatText(_followersCount, 'Seguidores', onTap: () => _navigateToConnections(initialTab: 0)),
-            const SizedBox(width: 24),
-            _buildStatText(_followingCount, 'Siguiendo', onTap: () => _navigateToConnections(initialTab: 1)),
-          ],
-        ),
-
-        if (!isOwnProfile)
-          Padding(
-            padding: const EdgeInsets.only(top: 24, left: 16, right: 16),
-            child: Row(
+            // Stats Row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _handleFollow,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _isFollowing ? Colors.transparent : NeoColors.accent,
-                      foregroundColor: _isFollowing ? Colors.white : Colors.white,
-                      elevation: 0,
-                      side: _isFollowing ? const BorderSide(color: Colors.grey) : null,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    child: Text(_isFollowing ? 'Siguiendo' : 'Seguir'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _handleRequestFriendship,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    child: const Text('Añadir amigo'),
-                  ),
-                ),
+                _buildStatText(_followersCount, 'Seguidores', onTap: () => _navigateToConnections(initialTab: 0)),
+                const SizedBox(width: 24),
+                _buildStatText(_followingCount, 'Siguiendo', onTap: () => _navigateToConnections(initialTab: 1)),
+                const SizedBox(width: 24),
+                _buildStatText(user.neocoinsBalance.toInt(), 'NeoCoins'),
               ],
             ),
+
+            const SizedBox(height: 24),
+
+            // Action Buttons
+            if (!isOwnProfile)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _handleFollow,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _isFollowing ? Colors.transparent : NeoColors.accent,
+                          foregroundColor: Colors.white,
+                          elevation: _isFollowing ? 0 : 4,
+                          side: _isFollowing ? BorderSide(color: Colors.white.withValues(alpha: 0.3)) : null,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                        child: Text(_isFollowing ? 'Siguiendo' : 'Seguir', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => _handleMessage(), // Placeholder
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                         child: const Text('Chat'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              
+             const SizedBox(height: 16),
+          ],
+        ),
+        
+        // 3. Top Navigation Bar (Overlaid)
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                   // Back Button
+                   InkWell(
+                     onTap: () => Navigator.of(context).pop(),
+                     borderRadius: BorderRadius.circular(20),
+                     child: Container(
+                       padding: const EdgeInsets.all(8),
+                       decoration: BoxDecoration(
+                         color: Colors.black.withValues(alpha: 0.3),
+                         shape: BoxShape.circle,
+                       ),
+                       child: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
+                     ),
+                   ),
+                   
+                   // Menu Button
+                   InkWell(
+                     onTap: () => isOwnProfile ? _showProfileMenu(context) : null,
+                     borderRadius: BorderRadius.circular(20),
+                     child: Container(
+                       padding: const EdgeInsets.all(8),
+                       decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.3),
+                         shape: BoxShape.circle,
+                       ),
+                       child: const Icon(Icons.more_vert, color: Colors.white, size: 24),
+                     ),
+                   ),
+                ],
+              ),
+            ),
           ),
-          
-        const SizedBox(height: 16),
+        ),
       ],
     );
   }
