@@ -217,6 +217,8 @@ class NotificationsRepository {
         return NotificationType.modAction;
       case 'announcement':
         return NotificationType.announcement;
+      case 'role_invitation': // ✅ New case
+        return NotificationType.roleInvitation;
       default:
         return NotificationType.system;
     }

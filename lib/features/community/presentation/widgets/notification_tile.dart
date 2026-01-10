@@ -10,6 +10,8 @@ import '../../../../core/theme/neo_theme.dart';
 import '../../domain/entities/community_notification.dart';
 import '../providers/notifications_provider.dart';
 import '../providers/friendship_provider.dart';
+import '../providers/community_providers.dart';
+import '../providers/community_members_provider.dart';
 
 class NotificationTile extends ConsumerStatefulWidget {
   final CommunityNotification notification;
@@ -53,7 +55,7 @@ class _NotificationTileState extends ConsumerState<NotificationTile> {
           children: [
             _buildHeader(n),
             
-            if (n.isActionable && n.isFriendshipRequest)
+            if (n.isActionable && (n.isFriendshipRequest || n.isRoleInvitation))
               _buildActionButtons(n),
             
             if (!n.isActionable && n.actionStatus != null)
@@ -255,6 +257,8 @@ class _NotificationTileState extends ConsumerState<NotificationTile> {
         return Icons.campaign;
       case NotificationType.system:
         return Icons.info;
+      case NotificationType.roleInvitation:
+        return Icons.upgrade;
     }
   }
 
@@ -275,27 +279,41 @@ class _NotificationTileState extends ConsumerState<NotificationTile> {
     if (_isProcessing) return;
     
     final n = widget.notification;
+    // For roles, entityType might be 'community' or 'role', check logic
     if (n.entityType == null || n.entityId == null) return;
 
     setState(() => _isProcessing = true);
 
     try {
-      final success = await ref
-          .read(notificationActionsProvider(n.communityId).notifier)
-          .resolveAction(
-            notificationId: n.id,
-            accepted: accepted,
-            entityType: n.entityType!,
-            entityId: n.entityId!,
-          );
+      // 1. Specific Logic for Roles
+      if (n.isRoleInvitation) {
+         final repo = ref.read(communityRepositoryProvider);
+         final result = accepted 
+             ? await repo.acceptRoleInvitation(communityId: n.communityId)
+             : await repo.rejectRoleInvitation(communityId: n.communityId);
+         
+         result.fold(
+           (l) => throw Exception(l.message),
+           (_) {} // Success
+         );
+      } 
+      // 2. Generic Logic (Friendship) via NotificationActionsNotifier
+      else {
+        final success = await ref
+            .read(notificationActionsProvider(n.communityId).notifier)
+            .resolveAction(
+              notificationId: n.id,
+              accepted: accepted,
+              entityType: n.entityType!,
+              entityId: n.entityId!,
+            );
 
-      if (!success) {
-        throw Exception('No se pudo completar la acción');
+        if (!success) {
+          throw Exception('No se pudo completar la acción');
+        }
       }
-
-      // Note: communityNotificationsProvider and pendingFriendshipRequestsProvider
-      // are already invalidated by the NotificationActionsNotifier
-
+      
+      // 3. Post-Action Updates
       if (n.isFriendshipRequest) {
         // Prefer actorId, fallback to data['requester_id']
         final otherUserId = n.actorId ?? n.data['requester_id'] as String?;
@@ -307,6 +325,14 @@ class _NotificationTileState extends ConsumerState<NotificationTile> {
           )));
         }
       }
+      
+      // For roles, invalidate members list
+      if (n.isRoleInvitation) {
+        ref.invalidate(communityMembersProvider(n.communityId));
+      }
+
+      // Refresh notification list to show new status
+      ref.invalidate(communityNotificationsProvider(n.communityId));
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
