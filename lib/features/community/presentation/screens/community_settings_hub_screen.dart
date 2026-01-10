@@ -14,6 +14,8 @@ import '../providers/title_request_providers.dart';
 import '../widgets/bento_card_widget.dart';
 import 'management/community_manage_roles_screen.dart';
 import 'management/community_banned_users_screen.dart';
+import 'management/moderation/community_reports_screen.dart';
+import 'management/moderation/community_activity_logs_screen.dart';
 
 class CommunityManagementScreen extends ConsumerWidget {
   final CommunityEntity community;
@@ -228,6 +230,24 @@ class CommunityManagementScreen extends ConsumerWidget {
   Widget _buildModerationSection(BuildContext context, Color themeColor) {
     return Column(
       children: [
+        // NEW: Centro de Reportes (AI + User Reports)
+        BentoCard(
+          icon: Icons.assignment_late_rounded,
+          title: 'Centro de Reportes',
+          subtitle: 'Revisar alertas de IA y denuncias',
+          accentColor: const Color(0xFFF59E0B), // Amber/Orange
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => CommunityReportsScreen(communityId: community.id),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        
+        // EXISTING: Banned Users
         BentoCard(
           icon: Icons.gavel_rounded,
           title: 'Usuarios Baneados',
@@ -238,6 +258,23 @@ class CommunityManagementScreen extends ConsumerWidget {
               context,
               MaterialPageRoute(
                 builder: (_) => CommunityBannedUsersScreen(communityId: community.id),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        
+        // NEW: Activity Logs (Forensic Audit)
+        BentoCard(
+          icon: Icons.history_edu_rounded,
+          title: 'Registro de Actividad',
+          subtitle: 'Auditoría forense y logs del sistema',
+          accentColor: const Color(0xFF0EA5E9), // Cyan
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => CommunityActivityLogsScreen(communityId: community.id),
               ),
             );
           },
