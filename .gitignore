@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Private admin commands - NEVER COMMIT
+**/ADMIN_COMMANDS_PRIVATE.md
