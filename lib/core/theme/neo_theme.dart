@@ -341,11 +341,17 @@ class NeoTheme {
       
       snackBarTheme: SnackBarThemeData(
         backgroundColor: NeoColors.card,
-        contentTextStyle: NeoTextStyles.bodyMedium,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(NeoSpacing.smallRadius),
+        contentTextStyle: NeoTextStyles.bodyMedium.copyWith(
+          color: NeoColors.textPrimary, // Force White Text
+          fontWeight: FontWeight.w500,
         ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(NeoSpacing.cardRadius),
+          side: const BorderSide(color: NeoColors.border, width: 1), // Premium Border
+        ),
+        insetPadding: const EdgeInsets.all(16), // Better spacing
         behavior: SnackBarBehavior.floating,
+        elevation: 4, // Subtle shadow for depth
       ),
       
       dialogTheme: DialogThemeData(
