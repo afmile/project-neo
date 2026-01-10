@@ -174,6 +174,15 @@ abstract class CommunityRepository {
 
   /// Fix missing memberships for communities owned by the user
   Future<Either<Failure, int>> fixMissingMemberships();
+
+  /// Fetch list of user IDs blocked by current user
+  Future<Either<Failure, List<String>>> fetchBlockedUserIds();
+
+  /// Block a user (prevents seeing their content)
+  Future<Either<Failure, void>> blockUser(String userId);
+
+  /// Unblock a user
+  Future<Either<Failure, void>> unblockUser(String userId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -633,11 +642,24 @@ class CommunityRepositoryImpl implements CommunityRepository {
     try {
       print('🔄 Fetching wall posts from SQL VIEW for community: $communityId');
 
+      // Fetch blocked user IDs first (for feed filtering)
+      final blockedResult = await fetchBlockedUserIds();
+      final blockedIds = blockedResult.getOrElse(() => []);
+      
+      if (blockedIds.isNotEmpty) {
+        print('🚫 Filtering ${blockedIds.length} blocked users from feed');
+      }
+
       // Query the VIEW instead of the raw table
       var query = _supabase
           .from('v_community_wall_feed')
           .select()
           .eq('community_id', communityId);
+
+      // Filter out blocked users
+      if (blockedIds.isNotEmpty) {
+        query = query.not('author_id', 'in', '(${blockedIds.join(',')})');
+      }
 
       // Apply cursor if provided
       if (cursorCreatedAt != null && cursorId != null) {
@@ -1358,7 +1380,97 @@ class CommunityRepositoryImpl implements CommunityRepository {
       case 'archived':
         return CommunityStatus.archived;
       default:
-        return CommunityStatus.active;
+    }
+    return CommunityStatus.active;
+  }
+
+  // =============================================================================
+  // USER BLOCKING (App Store Compliance)
+  // =============================================================================
+
+  @override
+  Future<Either<Failure, List<String>>> fetchBlockedUserIds() async {
+    try {
+      final userId = _currentUserId;
+      if (userId == null) {
+        return const Left(AuthFailure('Usuario no autenticado'));
+      }
+
+      print('🔍 Fetching blocked users for: $userId');
+
+      final response = await _supabase
+          .from('user_blocks')
+          .select('blocked_id')
+          .eq('blocker_id', userId);
+
+      final blockedIds = (response as List)
+          .map((row) => row['blocked_id'] as String)
+          .toList();
+
+      print('✅ Found ${blockedIds.length} blocked users');
+      return Right(blockedIds);
+    } catch (e) {
+      print('❌ Error fetching blocked users: $e');
+      return Left(ServerFailure('Error cargando usuarios bloqueados: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> blockUser(String userId) async {
+    try {
+      final currentUserId = _currentUserId;
+      if (currentUserId == null) {
+        return const Left(AuthFailure('Usuario no autenticado'));
+      }
+
+      if (currentUserId == userId) {
+        return const Left(ValidationFailure('No puedes bloquearte a ti mismo'));
+      }
+
+      print('🚫 Blocking user: $userId');
+
+      await _supabase.from('user_blocks').insert({
+        'blocker_id': currentUserId,
+        'blocked_id': userId,
+      });
+
+      print('✅ User blocked successfully');
+      return const Right(null);
+    } on PostgrestException catch (e) {
+      if (e.code == '23505') {
+        // Duplicate key - user is already blocked
+        print('ℹ️ User already blocked');
+        return const Right(null);
+      }
+      print('❌ Postgres error blocking user: ${e.message}');
+      return Left(ServerFailure('Error bloqueando usuario: ${e.message}'));
+    } catch (e) {
+      print('❌ Error blocking user: $e');
+      return Left(ServerFailure('Error bloqueando usuario: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> unblockUser(String userId) async {
+    try {
+      final currentUserId = _currentUserId;
+      if (currentUserId == null) {
+        return const Left(AuthFailure('Usuario no autenticado'));
+      }
+
+      print('✅ Unblocking user: $userId');
+
+      await _supabase
+          .from('user_blocks')
+          .delete()
+          .eq('blocker_id', currentUserId)
+          .eq('blocked_id', userId);
+
+      print('✅ User unblocked successfully');
+      return const Right(null);
+    } catch (e) {
+      print('❌ Error unblocking user: $e');
+      return Left(ServerFailure('Error desbloqueando usuario: $e'));
     }
   }
 }
