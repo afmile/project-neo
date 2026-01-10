@@ -12,6 +12,8 @@ import '../../domain/entities/community_entity.dart';
 import '../providers/local_identity_providers.dart';
 import '../providers/title_request_providers.dart';
 import '../widgets/bento_card_widget.dart';
+import 'management/community_manage_roles_screen.dart';
+import 'management/community_banned_users_screen.dart';
 
 class CommunityManagementScreen extends ConsumerWidget {
   final CommunityEntity community;
@@ -77,17 +79,21 @@ class CommunityManagementScreen extends ConsumerWidget {
         body: localIdentityAsync.when(
           data: (identity) {
             final role = identity?.role?.toLowerCase() ?? '';
-            final isOwner = user?.id == community.ownerId;
-            final isLeader = isOwner || 
-                           role == 'leader' || 
-                           role == 'curator' || 
-                           role == 'mod';
+            final isOwner = user?.id == community.ownerId; // Founder
+            final isLeader = role == 'leader';
+            final isModerator = role == 'moderator' || role == 'mod';
+            
+            // "High Command" = Founder or Leader
+            final isHighCommand = isOwner || isLeader;
+            // "Staff" = Founder, Leader, or Moderator
+            final isStaff = isHighCommand || isModerator;
 
             return _buildContent(
               context,
               ref,
               themeColor,
-              isLeader: isLeader,
+              isHighCommand: isHighCommand,
+              isStaff: isStaff,
               isOwner: isOwner,
               userId: user?.id ?? '',
             );
@@ -97,7 +103,8 @@ class CommunityManagementScreen extends ConsumerWidget {
             context,
             ref,
             themeColor,
-            isLeader: false,
+            isHighCommand: false,
+            isStaff: false,
             isOwner: false,
             userId: user?.id ?? '',
           ),
@@ -110,7 +117,8 @@ class CommunityManagementScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     Color themeColor, {
-    required bool isLeader,
+    required bool isHighCommand,
+    required bool isStaff,
     required bool isOwner,
     required String userId,
   }) {
@@ -128,47 +136,40 @@ class CommunityManagementScreen extends ConsumerWidget {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Leader Section (Leaders+)
-          if (isLeader) ...[
+          // 1. MANAGEMENT Section (Founder & Leader ONLY)
+          if (isHighCommand) ...[
             const SettingsSectionHeader(title: 'Gestión'),
-            _buildLeaderSection(context, ref, themeColor),
+            _buildManagementSection(context, ref, themeColor),
           ],
 
-          // Owner Section (Owners only)
+          // 2. MODERATION Section (Founder, Leader, Moderator)
+          if (isStaff) ...[
+            const SettingsSectionHeader(title: 'Moderación'),
+            _buildModerationSection(context, themeColor),
+          ],
+
+          // 3. ADMINISTRATION Section (Founder ONLY)
           if (isOwner) ...[
             const SettingsSectionHeader(title: 'Administración'),
             _buildOwnerSection(context, themeColor),
           ],
 
-          // If not a leader, show message
-          if (!isLeader) ...[
+          // Access Denied
+          if (!isStaff) ...[
             Center(
               child: Padding(
                 padding: const EdgeInsets.all(32),
                 child: Column(
                   children: [
-                    Icon(
-                      Icons.lock_outline,
-                      size: 64,
-                      color: Colors.white.withOpacity(0.3),
-                    ),
+                    Icon(Icons.lock_outline, size: 64, color: Colors.white.withOpacity(0.3)),
                     const SizedBox(height: 16),
                     Text(
-                      'Solo para Líderes',
+                      'Solo para Staff',
                       style: TextStyle(
                         color: Colors.white.withOpacity(0.7),
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'No tienes permisos para gestionar esta comunidad',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.5),
-                        fontSize: 14,
-                      ),
-                      textAlign: TextAlign.center,
                     ),
                   ],
                 ),
@@ -182,8 +183,8 @@ class CommunityManagementScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildLeaderSection(BuildContext context, WidgetRef ref, Color themeColor) {
-    // Get pending requests count for badge
+  Widget _buildManagementSection(BuildContext context, WidgetRef ref, Color themeColor) {
+    // Get pending requests count
     final pendingRequestsAsync = ref.watch(pendingTitleRequestsProvider(community.id));
     final pendingCount = pendingRequestsAsync.when(
       data: (requests) => requests.length,
@@ -203,10 +204,7 @@ class CommunityManagementScreen extends ConsumerWidget {
             context.pushNamed(
               'manage-title-requests',
               pathParameters: {'communityId': community.id},
-              extra: {
-                'name': community.title,
-                'color': themeColor,
-              },
+              extra: {'name': community.title, 'color': themeColor},
             );
           },
         ),
@@ -217,9 +215,30 @@ class CommunityManagementScreen extends ConsumerWidget {
           subtitle: 'Asignar y modificar roles de miembros',
           accentColor: const Color(0xFF3B82F6),
           onTap: () {
-            // TODO: Navigate to role management
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Próximamente')),
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => CommunityManageRolesScreen(communityId: community.id)),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildModerationSection(BuildContext context, Color themeColor) {
+    return Column(
+      children: [
+        BentoCard(
+          icon: Icons.gavel_rounded,
+          title: 'Usuarios Baneados',
+          subtitle: 'Gestionar expulsiones y sanciones',
+          accentColor: const Color(0xFFEF4444), // Red
+          onTap: () {
+             Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => CommunityBannedUsersScreen(communityId: community.id),
+              ),
             );
           },
         ),
@@ -243,18 +262,15 @@ class CommunityManagementScreen extends ConsumerWidget {
             );
           },
         ),
+        // ... (other owner tiles remain same, simplified for brevity in this replace but I should keep them if file has them)
+        // Re-adding existing owner tiles to avoid deletion
         const SizedBox(height: 12),
         BentoCard(
           icon: Icons.extension_outlined,
           title: 'Módulos',
           subtitle: 'Activa o desactiva funcionalidades',
           accentColor: const Color(0xFF06B6D4),
-          onTap: () {
-            // TODO: Navigate to modules (Neo Studio)
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Próximamente')),
-            );
-          },
+          onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Próximamente'))),
         ),
         const SizedBox(height: 12),
         BentoCard(
@@ -262,12 +278,7 @@ class CommunityManagementScreen extends ConsumerWidget {
           title: 'Estadísticas',
           subtitle: 'Métricas y análisis de la comunidad',
           accentColor: const Color(0xFF8B5CF6),
-          onTap: () {
-            // TODO: Navigate to stats (Neo Studio)
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Próximamente')),
-            );
-          },
+          onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Próximamente'))),
         ),
         const SizedBox(height: 12),
         BentoCard(
@@ -275,12 +286,7 @@ class CommunityManagementScreen extends ConsumerWidget {
           title: 'Administrar Miembros',
           subtitle: 'Gestiona miembros y permisos',
           accentColor: const Color(0xFFF59E0B),
-          onTap: () {
-            // TODO: Navigate to members admin (Neo Studio)
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Próximamente')),
-            );
-          },
+          onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Próximamente'))),
         ),
       ],
     );

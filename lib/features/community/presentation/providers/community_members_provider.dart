@@ -13,12 +13,17 @@ class CommunityMember {
   final String? nickname;     // Local community nickname (from community_members)
   final String? avatarUrl;    // Can be local or global
   final String role;
+  final String? pendingRole;  // Role offered but not yet accepted
   final DateTime joinedAt;
   
   // Role badges
   final bool isFounder;       // owner role
   final bool isLeader;        // is_leader from DB
   final bool isModerator;     // is_moderator from DB
+  
+  // Moderation
+  final bool isBanned;
+  final DateTime? bannedAt;
 
   const CommunityMember({
     required this.id,
@@ -26,10 +31,13 @@ class CommunityMember {
     this.nickname,
     this.avatarUrl,
     required this.role,
+    this.pendingRole,
     required this.joinedAt,
     this.isFounder = false,
     this.isLeader = false,
     this.isModerator = false,
+    this.isBanned = false,
+    this.bannedAt,
   });
 
   factory CommunityMember.fromJson(Map<String, dynamic> json) {
@@ -44,10 +52,13 @@ class CommunityMember {
       avatarUrl: json['avatar_url'] as String? ?? 
                 userObj?['avatar_global_url'] as String?,
       role: role,
+      pendingRole: json['pending_role'] as String?,
       joinedAt: DateTime.tryParse(json['joined_at'] as String? ?? '') ?? DateTime.now(),
       isFounder: role == 'owner',
       isLeader: json['is_leader'] as bool? ?? false,
       isModerator: json['is_moderator'] as bool? ?? false,
+      isBanned: json['is_banned'] as bool? ?? false,
+      bannedAt: DateTime.tryParse(json['banned_at'] as String? ?? ''),
     );
   }
 
@@ -83,6 +94,7 @@ final communityMembersProvider = FutureProvider.family<List<CommunityMember>, St
           ''')
           .eq('community_id', communityId)
           .eq('is_active', true) // Only active members
+          .eq('is_banned', false) // Exclude banned members
           .order('is_leader', ascending: false)
           .order('is_moderator', ascending: false)
           .order('joined_at', ascending: false);

@@ -804,7 +804,7 @@ class _PublicUserProfileScreenState
                       ],
                     ),
                     child: Text(
-                      member.roleDisplayName.toUpperCase(), // "FUNDADOR", "LÍDER", "MOD"
+                      member.isFounder ? "FUNDADOR" : member.isLeader ? "LÍDER" : "MOD",
                       style: TextStyle(
                         color: member.isFounder ? const Color(0xFF3E2723) : Colors.white,
                         fontSize: 10,

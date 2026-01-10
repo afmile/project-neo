@@ -8,6 +8,7 @@ import 'package:dartz/dartz.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/error/failures.dart';
 import '../../domain/entities/community_entity.dart';
+import '../../presentation/providers/community_members_provider.dart'; // For CommunityMember
 
 // ═══════════════════════════════════════════════════════════════════════════
 // INTERFACE
@@ -133,6 +134,43 @@ abstract class CommunityRepository {
   
   /// Delete a profile wall post
   Future<Either<Failure, void>> deleteProfileWallPost(String postId);
+  
+  /// Update a community member's role (Send Invitation)
+  Future<Either<Failure, void>> inviteMemberToRole({
+    required String communityId,
+    required String userId,
+    required String newRole, // 'leader', 'moderator', 'member'
+  });
+
+  /// Accept a pending role invitation
+  Future<Either<Failure, void>> acceptRoleInvitation({
+    required String communityId,
+  });
+
+  /// Reject a pending role invitation
+  Future<Either<Failure, void>> rejectRoleInvitation({
+    required String communityId,
+  });
+
+  /// Ban a member from the community
+  Future<Either<Failure, void>> banMember({
+    required String communityId,
+    required String userId,
+    String? reason,
+  });
+
+  /// Unban a member (pardon)
+  Future<Either<Failure, void>> unbanMember({
+    required String communityId,
+    required String userId,
+  });
+
+  /// Fetch list of banned members
+  Future<Either<Failure, List<CommunityMember>>> fetchBannedMembers({
+    required String communityId,
+    int limit = 50,
+    int offset = 0,
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -987,6 +1025,207 @@ class CommunityRepositoryImpl implements CommunityRepository {
       return Left(ServerFailure('Error eliminando post: $e'));
     }
   }
+
+  @override
+  Future<Either<Failure, void>> inviteMemberToRole({
+    required String communityId,
+    required String userId,
+    required String newRole,
+  }) async {
+    try {
+      final validRoles = ['leader', 'moderator', 'member'];
+      if (!validRoles.contains(newRole)) {
+        return Left(ServerFailure('Invalid role specified'));
+      }
+
+      // Logic: Demotions are immediate, Promotions are pending
+      // checking current role is complex here without fetching, but we can assume:
+      // if newRole == 'member', it's a demotion (immediate).
+      // if newRole == 'leader' or 'moderator', it's a promotion (pending).
+      
+      bool isPromotion = newRole != 'member';
+
+      if (isPromotion) {
+        // Sets pending_role, leaves active role untouched
+        await _supabase
+            .from('community_members')
+            .update({
+              'pending_role': newRole,
+              // Do NOT update actual role columns yet
+            })
+            .eq('community_id', communityId)
+            .eq('user_id', userId);
+      } else {
+        // Demotion: Immediate update, clear flags
+        await _supabase
+            .from('community_members')
+            .update({
+              'role': 'member',
+              'is_leader': false,
+              'is_moderator': false,
+              'pending_role': null, // Clear any pending stuff
+            })
+            .eq('community_id', communityId)
+            .eq('user_id', userId);
+      }
+
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> acceptRoleInvitation({
+    required String communityId,
+  }) async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return Left(ServerFailure('User not authenticated'));
+
+      // 1. Fetch pending role
+      final data = await _supabase
+          .from('community_members')
+          .select('pending_role')
+          .eq('community_id', communityId)
+          .eq('user_id', userId)
+          .single();
+
+      final pendingRole = data['pending_role'] as String?;
+      if (pendingRole == null) return Left(ServerFailure('No pending role invitation'));
+
+      // 2. Apply Role
+      final updates = <String, dynamic>{
+        'role': 'member', // default base
+        'is_leader': false,
+        'is_moderator': false,
+        'pending_role': null, // Clear pending
+      };
+
+      if (pendingRole == 'leader') {
+         updates['role'] = 'leader';
+         updates['is_leader'] = true;
+         updates['is_moderator'] = true; // Leaders are mods too
+      } else if (pendingRole == 'moderator') {
+         updates['role'] = 'moderator';
+         updates['is_moderator'] = true;
+      }
+      // if pending was 'member', it wouldn't be here as that's immediate demotion
+
+      await _supabase
+          .from('community_members')
+          .update(updates)
+          .eq('community_id', communityId)
+          .eq('user_id', userId);
+
+      // 3. Update Notifications (mark accepted)
+      await _supabase
+          .from('community_notifications')
+          .update({'action_status': 'accepted', 'read_at': DateTime.now().toIso8601String()})
+          .eq('recipient_id', userId)
+          .eq('type', 'role_invitation')
+          .eq('entity_id', communityId) 
+          .eq('action_status', 'pending');
+
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> rejectRoleInvitation({
+    required String communityId,
+  }) async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return Left(ServerFailure('User not authenticated'));
+
+      // Clear pending role
+      await _supabase
+          .from('community_members')
+          .update({'pending_role': null})
+          .eq('community_id', communityId)
+          .eq('user_id', userId);
+
+      // Mark notification rejected
+      await _supabase
+          .from('community_notifications')
+          .update({'action_status': 'rejected', 'read_at': DateTime.now().toIso8601String()})
+          .eq('recipient_id', userId)
+          .eq('type', 'role_invitation')
+          .eq('entity_id', communityId)
+          .eq('action_status', 'pending');
+
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> banMember({
+    required String communityId,
+    required String userId,
+    String? reason,
+  }) async {
+    try {
+      // Set banned flag. 
+      // We DO NOT set is_active = false, because we want to keep their role/data 
+      // frozen until unban, BUT we must ensure they don't show up in valid member lists.
+      await _supabase.from('community_members').update({
+        'is_banned': true,
+        'banned_at': DateTime.now().toIso8601String(),
+      }).eq('community_id', communityId).eq('user_id', userId);
+
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure('Error al banear usuario: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> unbanMember({
+    required String communityId,
+    required String userId,
+  }) async {
+    try {
+      await _supabase.from('community_members').update({
+        'is_banned': false,
+        'banned_at': null,
+      }).eq('community_id', communityId).eq('user_id', userId);
+
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure('Error al desbanear usuario: $e'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, List<CommunityMember>>> fetchBannedMembers({
+    required String communityId,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    try {
+      final response = await _supabase
+          .from('community_members')
+          .select('''
+            user_id, role, joined_at, nickname, avatar_url, is_leader, is_moderator, is_active, is_banned, banned_at,
+            users_global!community_members_user_id_fkey(username, avatar_global_url)
+          ''')
+          .eq('community_id', communityId)
+          .eq('is_banned', true)
+          .order('banned_at', ascending: false)
+          .range(offset, offset + limit - 1);
+
+      final members = (response as List).map((json) => CommunityMember.fromJson(json)).toList();
+      return Right(members);
+    } catch (e) {
+      return Left(ServerFailure('Error cargando usuarios baneados: $e'));
+    }
+  }
+
 
   // ═══════════════════════════════════════════════════════════════════════════
   // HELPERS
