@@ -29,6 +29,7 @@ class CommunityEntity extends Equatable {
   final String language;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? currentUserRole; // Added for UI filtering (owner, leader, moderator, member)
 
   const CommunityEntity({
     required this.id,
@@ -49,6 +50,7 @@ class CommunityEntity extends Equatable {
     this.language = 'es',
     required this.createdAt,
     required this.updatedAt,
+    this.currentUserRole,
   });
 
   /// Get the primary accent color for this community
@@ -57,11 +59,19 @@ class CommunityEntity extends Equatable {
   /// Check if current user is owner
   bool isOwner(String userId) => ownerId == userId;
 
+  /// Check if current user has staff privileges (Owner, Leader, Moderator)
+  bool get isStaff {
+    if (currentUserRole == 'owner') return true;
+    if (currentUserRole == 'leader') return true;
+    if (currentUserRole == 'moderator') return true;
+    return false;
+  }
+
   @override
   List<Object?> get props => [
     id, ownerId, title, slug, description, iconUrl, bannerUrl,
     theme, isNsfw, status, memberCount, isPrivate, inviteOnly,
-    tabs, categoryIds, language, createdAt, updatedAt,
+    tabs, categoryIds, language, createdAt, updatedAt, currentUserRole,
   ];
 }
 

@@ -295,15 +295,17 @@ class _CommunityManageRolesScreenState extends ConsumerState<CommunityManageRole
         title: const Text("Gestionar Roles", style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(60),
-          child: Padding(
+      ),
+      body: Column(
+        children: [
+          // 1. Search Bar (Global)
+          Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: TextField(
               style: const TextStyle(color: Colors.white),
               onChanged: (value) => setState(() => _searchQuery = value),
               decoration: InputDecoration(
-                hintText: 'Buscar por nombre...',
+                hintText: 'Buscar miembro...',
                 hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
                 prefixIcon: Icon(Icons.search, color: Colors.white.withOpacity(0.5)),
                 filled: true,
@@ -316,58 +318,121 @@ class _CommunityManageRolesScreenState extends ConsumerState<CommunityManageRole
               ),
             ),
           ),
-        ),
-      ),
-      body: membersAsync.when(
-        data: (members) {
-           // Filter members locally
-           final filteredMembers = members.where((m) {
-             final name = (m.nickname ?? m.username).toLowerCase();
-             return name.contains(_searchQuery.toLowerCase());
-           }).toList();
 
-           if (filteredMembers.isEmpty) return const Center(child: Text("No se encontraron miembros", style: TextStyle(color: Colors.white54)));
-           
-           return ListView.separated(
-             itemCount: filteredMembers.length,
-             separatorBuilder: (_, __) => const Divider(color: Colors.white10),
-             itemBuilder: (context, index) {
-               final member = filteredMembers[index];
-               final displayName = member.nickname ?? member.username;
-               
-               return ListTile(
-                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                 leading: CircleAvatar(
-                   radius: 20,
-                   backgroundColor: Colors.grey[800],
-                   backgroundImage: member.avatarUrl != null ? NetworkImage(member.avatarUrl!) : null,
-                   child: member.avatarUrl == null 
-                       ? Text(displayName[0].toUpperCase(), style: const TextStyle(color: Colors.white)) 
-                       : null,
-                 ),
-                 title: Text(
-                    displayName, 
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
-                 ),
-                 // SUBTITLE REMOVED to hide global username as requested
-                 trailing: Row(
-                   mainAxisSize: MainAxisSize.min,
-                   children: [
-                     _buildRoleBadge(member),
-                     if (member.pendingRole != null) ...[
-                       const SizedBox(width: 8),
-                       _badge("PROPUESTA: ${member.pendingRole!.toUpperCase()}", Colors.orangeAccent.withOpacity(0.2), Colors.orangeAccent),
-                     ]
-                   ],
-                 ),
-                 onTap: () => _showRoleOptions(context, member),
-               );
-             },
-           );
-        },
-        error: (err, stack) => Center(child: Text("Error: $err", style: const TextStyle(color: Colors.red))),
-        loading: () => const Center(child: CircularProgressIndicator(color: NeoColors.accent)),
+          // 2. Content (Search Results OR Tabs)
+          Expanded(
+            child: membersAsync.when(
+              data: (members) {
+                // CASE A: Global Search
+                if (_searchQuery.isNotEmpty) {
+                  final searchResults = members.where((m) {
+                    final name = (m.nickname ?? m.username).toLowerCase();
+                    return name.contains(_searchQuery.toLowerCase());
+                  }).toList();
+
+                  if (searchResults.isEmpty) {
+                     return const Center(child: Text("No se encontraron miembros", style: TextStyle(color: Colors.white54)));
+                  }
+                  return _buildMemberList(searchResults, isHistory: false);
+                }
+
+                // CASE B: Tabbed View (Team / History)
+                final teamMembers = members.where((m) => 
+                  m.isFounder || m.isLeader || m.isModerator || m.pendingRole != null
+                ).toList();
+
+                final historyMembers = members.where((m) => 
+                  m.previousRole != null && !m.isFounder && !m.isLeader && !m.isModerator
+                ).toList();
+
+                return DefaultTabController(
+                  length: 2,
+                  child: Column(
+                    children: [
+                      const TabBar(
+                        indicatorColor: NeoColors.accent,
+                        labelColor: Colors.white,
+                        unselectedLabelColor: Colors.grey,
+                        dividerColor: Colors.transparent,
+                        tabs: [
+                          Tab(text: "Equipo"),
+                          Tab(text: "Historial"),
+                        ],
+                      ),
+                      Expanded(
+                        child: TabBarView(
+                          children: [
+                            // Tab 1: Active Team
+                            teamMembers.isEmpty 
+                                ? const Center(child: Text("No hay staff activo", style: TextStyle(color: Colors.white54)))
+                                : _buildMemberList(teamMembers, isHistory: false),
+                            
+                            // Tab 2: History
+                            historyMembers.isEmpty
+                                ? const Center(child: Text("No hay historial reciente", style: TextStyle(color: Colors.white54)))
+                                : _buildMemberList(historyMembers, isHistory: true),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+              error: (err, stack) => Center(child: Text("Error: $err", style: const TextStyle(color: Colors.red))),
+              loading: () => const Center(child: CircularProgressIndicator(color: NeoColors.accent)),
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildMemberList(List<CommunityMember> members, {required bool isHistory}) {
+    return ListView.separated(
+      padding: const EdgeInsets.only(top: 8),
+      itemCount: members.length,
+      separatorBuilder: (_, __) => const Divider(color: Colors.white10),
+      itemBuilder: (context, index) {
+        final member = members[index];
+        final displayName = member.nickname ?? member.username;
+        
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          leading: CircleAvatar(
+            radius: 20,
+            backgroundColor: Colors.grey[800],
+            backgroundImage: member.avatarUrl != null ? NetworkImage(member.avatarUrl!) : null,
+            child: member.avatarUrl == null 
+                ? Text(displayName[0].toUpperCase(), style: const TextStyle(color: Colors.white)) 
+                : null,
+          ),
+          title: Text(
+             displayName, 
+             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
+          ),
+          subtitle: isHistory && member.previousRole != null
+              ? Text("Ex-${member.previousRole!.toUpperCase()}", style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12))
+              : null,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+               if (!isHistory) _buildRoleBadge(member),
+               if (member.pendingRole != null) ...[
+                 const SizedBox(width: 8),
+                 _badge("PROPUESTA: ${member.pendingRole!.toUpperCase()}", Colors.orangeAccent.withOpacity(0.2), Colors.orangeAccent),
+               ],
+               // Restore button for history
+               if (isHistory)
+                  IconButton(
+                    icon: const Icon(Icons.restore, color: NeoColors.accent),
+                    tooltip: 'Restaurar Rango',
+                    onPressed: () => _updateRole(member, member.previousRole!),
+                  )
+            ],
+          ),
+          onTap: () => _showRoleOptions(context, member),
+        );
+      },
     );
   }
 

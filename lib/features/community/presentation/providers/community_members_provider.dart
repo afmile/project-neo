@@ -25,6 +25,9 @@ class CommunityMember {
   final bool isBanned;
   final DateTime? bannedAt;
 
+  // Staff History
+  final String? previousRole;
+
   const CommunityMember({
     required this.id,
     required this.username,
@@ -32,6 +35,7 @@ class CommunityMember {
     this.avatarUrl,
     required this.role,
     this.pendingRole,
+    this.previousRole,
     required this.joinedAt,
     this.isFounder = false,
     this.isLeader = false,
@@ -53,6 +57,7 @@ class CommunityMember {
                 userObj?['avatar_global_url'] as String?,
       role: role,
       pendingRole: json['pending_role'] as String?,
+      previousRole: json['previous_role'] as String?,
       joinedAt: DateTime.tryParse(json['joined_at'] as String? ?? '') ?? DateTime.now(),
       isFounder: role == 'owner',
       isLeader: json['is_leader'] as bool? ?? false,
@@ -89,7 +94,7 @@ final communityMembersProvider = FutureProvider.family<List<CommunityMember>, St
       final response = await supabase
           .from('community_members')
           .select('''
-            user_id, role, joined_at, nickname, avatar_url, is_leader, is_moderator, is_active,
+            user_id, role, joined_at, nickname, avatar_url, is_leader, is_moderator, is_active, previous_role,
             users_global!community_members_user_id_fkey(username, avatar_global_url)
           ''')
           .eq('community_id', communityId)

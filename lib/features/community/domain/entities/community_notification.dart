@@ -15,12 +15,14 @@ enum NotificationType {
   modAction,
   system,
   announcement,
+  roleInvitation, // ✅ New type
 }
 
 enum NotificationActionStatus {
   pending,
   accepted,
   rejected,
+  revoked, // Added revoked status just in case
 }
 
 class CommunityNotification extends Equatable {
@@ -64,6 +66,7 @@ class CommunityNotification extends Equatable {
   bool get isUnread => readAt == null;
   bool get isActionable => actionStatus == NotificationActionStatus.pending;
   bool get isFriendshipRequest => type == NotificationType.friendshipRequest;
+  bool get isRoleInvitation => type == NotificationType.roleInvitation; // ✅ New getter
 
   CommunityNotification copyWith({
     String? id,
