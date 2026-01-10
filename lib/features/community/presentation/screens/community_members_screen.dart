@@ -139,6 +139,11 @@ class _CommunityTab extends ConsumerWidget {
         final leaders = uniqueMembers
             .where((m) => ['owner', 'leader', 'agent'].contains(m.role))
             .toList();
+            
+        // Filter moderators
+        final moderators = uniqueMembers
+            .where((m) => m.role == 'moderator')
+            .toList();
 
         // Sort by created_at for new members (most recent first)
         final sortedMembers = List<CommunityMember>.from(uniqueMembers)
@@ -173,7 +178,7 @@ class _CommunityTab extends ConsumerWidget {
                 onUserTap: handleUserTap,
               ),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 24), // Spacing Reduced
 
               // Section 2: Leadership
               if (leaders.isNotEmpty) ...[
@@ -184,25 +189,38 @@ class _CommunityTab extends ConsumerWidget {
                   iconColor: const Color(0xFFFFD700),
                 ),
                 const SizedBox(height: 12),
-                SizedBox(
-                  height: 130, // INCREASED HEIGHT to fix overflow
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: leaders.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 12),
-                    itemBuilder: (context, index) {
-                      final leader = leaders[index];
-                      return _LeaderCard(
-                        member: leader,
-                        onTap: () => handleUserTap(leader.id),
-                      );
-                    },
-                  ),
+                _StaffList(
+                  members: leaders,
+                  onUserTap: handleUserTap,
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 24), // Spacing Reduced
               ],
 
-              // Section 3: New Members
+              // Section 3: Moderators (New Section)
+              _SectionHeader(
+                title: 'Moderadores',
+                count: moderators.length,
+                icon: Icons.security,
+                iconColor: const Color(0xFF4CAF50), // Green for Mod
+              ),
+              const SizedBox(height: 12),
+              if (moderators.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: Text(
+                    "No hay moderadores actualmente",
+                    style: TextStyle(color: Colors.grey[600], fontStyle: FontStyle.italic),
+                  ),
+                )
+              else
+                _StaffList(
+                  members: moderators,
+                  onUserTap: handleUserTap,
+                ),
+                
+              const SizedBox(height: 24), // Spacing Reduced
+
+              // Section 4: New Members
               _SectionHeader(
                 title: 'Recientes',
                 count: newMembers.length,
@@ -441,28 +459,28 @@ class _OnlineAvatarCell extends StatelessWidget {
   }
 }
 
-class _LeadershipSection extends StatelessWidget {
-  final List<CommunityMember> leaders;
+class _StaffList extends StatelessWidget {
+  final List<CommunityMember> members;
   final Function(String userId) onUserTap;
 
-  const _LeadershipSection({
-    required this.leaders,
+  const _StaffList({
+    required this.members,
     required this.onUserTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 100,
+      height: 140,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: leaders.length,
+        itemCount: members.length,
         separatorBuilder: (_, __) => const SizedBox(width: 12),
         itemBuilder: (context, index) {
-          final leader = leaders[index];
+          final member = members[index];
           return _LeaderCard(
-            member: leader,
-            onTap: () => onUserTap(leader.id),
+            member: member,
+            onTap: () => onUserTap(member.id),
           );
         },
       ),
@@ -539,12 +557,31 @@ class _LeaderCard extends StatelessWidget {
               ),
               overflow: TextOverflow.ellipsis,
             ),
-            Text(
-              member.roleDisplayName,
-              style: TextStyle(
-                color: roleColor,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: member.role == 'owner' 
+                      ? [const Color(0xFFFFD700), const Color(0xFFFFA000)] // Gold
+                      : member.role == 'leader' 
+                          ? [const Color(0xFFBA68C8), const Color(0xFF9C27B0)] // Purple
+                          : [const Color(0xFF66BB6A), const Color(0xFF43A047)], // Green
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black26, blurRadius: 2, offset: Offset(0, 1)),
+                ],
+              ),
+              child: Text(
+                member.roleDisplayName.toUpperCase(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
               ),
             ),
           ],

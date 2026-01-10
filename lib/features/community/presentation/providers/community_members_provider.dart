@@ -54,7 +54,7 @@ class CommunityMember {
   String get roleDisplayName {
     switch (role) {
       case 'owner':
-        return 'Dueño';
+        return 'Fundador';
       case 'agent':
         return 'Agente';
       case 'leader':

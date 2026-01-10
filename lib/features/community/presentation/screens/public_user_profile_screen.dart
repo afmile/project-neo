@@ -27,6 +27,8 @@ import '../widgets/profile_action_buttons.dart';
 import 'wall_post_thread_screen.dart';
 import '../providers/community_members_provider.dart';
 import '../providers/local_identity_providers.dart';
+import '../providers/community_providers.dart';
+import '../providers/community_presence_provider.dart';
 
 class PublicUserProfileScreen extends ConsumerStatefulWidget {
   final String userId;
@@ -632,42 +634,201 @@ class _PublicUserProfileScreenState
     );
   }
 
-  Widget _buildRoleBadge(CommunityMember member) {
+  Widget _buildCompactRoleBadge(CommunityMember member) {
     String? label;
-    Color bgColor = Colors.transparent;
+    List<Color> gradientColors = [];
     
     // Priority 1: Founder
     if (member.isFounder) {
-      label = "👑 Fundador";
-      bgColor = const Color(0xFFFFD700); // Gold
+      label = "Fundador";
+      gradientColors = [const Color(0xFFFFD700), const Color(0xFFFFA000)];
     } 
-    // Priority 2: Leader (if not founder but has leader flag)
+    // Priority 2: Leader
     else if (member.isLeader) {
-      label = "🛡️ Líder";
-      bgColor = const Color(0xFF9C27B0); // Amino Purple
+      label = "Líder";
+      gradientColors = [const Color(0xFFBA68C8), const Color(0xFF9C27B0)];
     } 
     // Priority 3: Moderator
     else if (member.isModerator) {
-      label = "⚔️ Moderador";
-      bgColor = const Color(0xFF4CAF50); // Green
+      label = "Mod";
+      gradientColors = [const Color(0xFF66BB6A), const Color(0xFF43A047)];
     }
 
-    if (label == null) return const SizedBox.shrink();
+    if (label == null || gradientColors.isEmpty) return const SizedBox.shrink();
 
     return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(20), // Pill shape
+        gradient: LinearGradient(
+          colors: gradientColors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: const [
-          BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))
-        ]
+          BoxShadow(color: Colors.black26, blurRadius: 2, offset: Offset(0, 1)),
+        ],
       ),
       child: Text(
-        label,
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+        label.toUpperCase(),
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.5,
+          shadows: [Shadow(color: Colors.black45, blurRadius: 1)],
+        ),
       ),
+    );
+  }
+
+
+
+  Widget _buildCoinBadge(int balance) {
+    return InkWell(
+      onTap: () {
+         ScaffoldMessenger.of(context).showSnackBar(
+           SnackBar(
+             content: Text(
+               'Saldo: $balance NeoCoins',
+               style: const TextStyle(fontWeight: FontWeight.bold),
+             ),
+             backgroundColor: const Color(0xFFFFA000), // Amber-ish
+             behavior: SnackBarBehavior.floating,
+           ),
+         );
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        // margin: EdgeInsets.symmetric(horizontal: 12, vertical: 10), // Adjust spacing in row
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.3), // Glassy look
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white24, width: 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.monetization_on_rounded, color: Color(0xFFFFD700), size: 18),
+            const SizedBox(width: 6),
+            Text(
+              '$balance', // REAL DATA ONLY
+              style: const TextStyle(
+                color: Colors.white, 
+                fontWeight: FontWeight.bold, 
+                fontSize: 14
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvatar(BuildContext context, UserEntity user, CommunityMember? member) {
+    // 1. Define Logic Helpers
+    final bool isStaff = member != null && (member.isFounder || member.isLeader || member.isModerator);
+    final bool isOnline = ref.watch(communityPresenceProvider(widget.communityId)).isUserOnline(user.id);
+    final double avatarSize = 110;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        // --- LAYER 1: The Image ---
+        Container(
+          width: avatarSize + 8,
+          height: avatarSize + 8,
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.black, // Border color matching bg
+          ),
+        ),
+        Container(
+          width: avatarSize,
+          height: avatarSize,
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            color: Color(0xFF1F2937),
+          ),
+          child: ClipOval(
+            child: user.avatarUrl != null
+                ? Image.network(
+                    user.avatarUrl!,
+                    fit: BoxFit.cover,
+                  )
+                : Center(
+                    child: Text(
+                      user.username[0].toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 40,
+                        color: NeoColors.accent,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+          ),
+        ).animate().scale(
+          duration: 400.ms, 
+          curve: Curves.easeOutBack,
+          begin: const Offset(0.8, 0.8),
+        ),
+
+        // --- LAYER 2: The Staff Badge (EXCLUSIVE) ---
+        if (isStaff)
+          Positioned(
+            bottom: -10, // Hanging off the bottom slightly
+            right: 0,
+            left: 0,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: member!.isFounder 
+                        ? [const Color(0xFFFFD700), const Color(0xFFFFA000)] 
+                        : member.isLeader 
+                            ? [const Color(0xFFBA68C8), const Color(0xFF9C27B0)]
+                            : [const Color(0xFF66BB6A), const Color(0xFF43A047)],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.black, width: 2),
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black38, blurRadius: 4, offset: Offset(0, 2))
+                  ],
+                ),
+                child: Text(
+                  member.roleDisplayName.toUpperCase(), // "FUNDADOR", "LÍDER", "MOD"
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+        // --- LAYER 3: The Online Dot (Universal if Online) ---
+        if (isOnline)
+          Positioned(
+            bottom: 2,
+            right: 2,
+            child: Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981), // Green
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.black, width: 2.5),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -705,60 +866,18 @@ class _PublicUserProfileScreenState
         // 2. Main Content (Avatar + Info)
         Column(
           children: [
-            SizedBox(height: coverHeight - (avatarSize / 2)),
+            SizedBox(height: coverHeight - (avatarSize / 2)), // Restored original spacing
             
+
+
             // Avatar Centered & Overlapping
             Center(
-               child: Stack(
-                 alignment: Alignment.center,
-                 children: [
-                   Container(
-                     width: avatarSize + 8,
-                     height: avatarSize + 8,
-                     decoration: const BoxDecoration(
-                       shape: BoxShape.circle,
-                       color: Colors.black, // Border color matching bg
-                     ),
-                   ),
-                   // Avatar Pulse Animation (optional/subtle)
-                   Container(
-                      width: avatarSize,
-                      height: avatarSize,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                         color: Color(0xFF1F2937),
-                      ),
-                      child: ClipOval(
-                        child: user.avatarUrl != null
-                            ? Image.network(
-                                user.avatarUrl!,
-                                fit: BoxFit.cover,
-                              )
-                            : Center(
-                                child: Text(
-                                  user.username[0].toUpperCase(),
-                                  style: const TextStyle(
-                                    fontSize: 40,
-                                    color: NeoColors.accent,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                      ),
-                   ).animate().scale(
-                     duration: 400.ms, 
-                     curve: Curves.easeOutBack,
-                     begin: const Offset(0.8, 0.8),
-                   ),
-                   
-                   // Online Status Dot (if needed later)
-                 ],
-               ),
+                child: _buildAvatar(context, user, memberProfile),
             ),
             
             const SizedBox(height: 12),
             
-            // Nickname
+            // Nickname (Cleaned up)
             Text(
               memberProfile?.nickname ?? user.username,
               style: const TextStyle(
@@ -772,9 +891,9 @@ class _PublicUserProfileScreenState
               ),
             ),
             
-            // Role Badge (Pill)
-            if (memberProfile != null)
-              _buildRoleBadge(memberProfile),
+            // Removed standalone Role Badge (Pill)
+            // if (memberProfile != null)
+            //   _buildRoleBadge(memberProfile),
 
              // Existing Level Badge (Optional, keeping for now if user wants)
              /*
@@ -799,8 +918,7 @@ class _PublicUserProfileScreenState
                 _buildStatText(_followersCount, 'Seguidores', onTap: () => _navigateToConnections(initialTab: 0)),
                 const SizedBox(width: 24),
                 _buildStatText(_followingCount, 'Siguiendo', onTap: () => _navigateToConnections(initialTab: 1)),
-                const SizedBox(width: 24),
-                _buildStatText(user.neocoinsBalance.toInt(), 'NeoCoins'),
+
               ],
             ),
 
@@ -874,7 +992,17 @@ class _PublicUserProfileScreenState
                      ),
                    ),
                    
-                   // Menu Button
+                   const Spacer(),
+                   
+                   // Wallet Badge (Center)
+                   if (isOwnProfile)
+                     _buildCoinBadge(user.neocoinsBalance.toInt())
+                   else 
+                     const SizedBox(width: 40), // Placeholder to balance structure
+                   
+                   const Spacer(),
+                   
+                   // Menu Button (Right)
                    InkWell(
                      onTap: () => isOwnProfile ? _showProfileMenu(context) : null,
                      borderRadius: BorderRadius.circular(20),
