@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../domain/entities/wall_post.dart';
 import '../../domain/entities/wall_post_comment.dart';
@@ -277,7 +278,14 @@ class WallPostItem extends StatelessWidget {
                 if (onMenuTap != null) {
                   onMenuTap!();
                 } else {
-                  showPostOptionsSheet(context, content: post.content);
+                  showPostOptionsSheet(
+                    context,
+                    content: post.content,
+                    communityId: post.communityId,
+                    authorId: post.authorId,
+                    postId: post.id,
+                    currentUserId: Supabase.instance.client.auth.currentUser?.id,
+                  );
                 }
               },
               borderRadius: BorderRadius.circular(20),

@@ -557,6 +557,10 @@ class _WallPostThreadScreenState extends ConsumerState<WallPostThreadScreen> {
                                content: comment.content,
                                showDelete: isAuthor || (widget.post.authorId == currentUserId),
                                onDelete: () => _deleteComment(comment.id),
+                               communityId: widget.post.communityId,
+                               authorId: comment.authorId,
+                               commentId: comment.id,
+                               currentUserId: currentUserId,
                              );
                            },
                            icon: Icon(Icons.more_horiz, color: Colors.grey[500], size: 20),

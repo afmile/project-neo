@@ -5,15 +5,24 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../../core/widgets/community_report_modal.dart';
 
 /// Shows a bottom sheet with post options
 ///
 /// Displays options: Share, Copy text, Block account, Report
+/// [communityId], [authorId], [postId], [commentId] are used for reporting
+/// [currentUserId] is used to hide "Reportar" if user is the author
 void showPostOptionsSheet(
   BuildContext context, {
   required String content,
   bool showDelete = false,
   VoidCallback? onDelete,
+  // Report parameters
+  String? communityId,
+  String? authorId,
+  String? postId,
+  String? commentId,
+  String? currentUserId,
 }) {
   showModalBottomSheet(
     context: context,
@@ -23,20 +32,48 @@ void showPostOptionsSheet(
       content: content,
       showDelete: showDelete,
       onDelete: onDelete,
+      communityId: communityId,
+      authorId: authorId,
+      postId: postId,
+      commentId: commentId,
+      currentUserId: currentUserId,
     ),
   );
 }
+
 
 class _PostOptionsSheet extends StatelessWidget {
   final String content;
   final bool showDelete;
   final VoidCallback? onDelete;
+  // Report parameters
+  final String? communityId;
+  final String? authorId;
+  final String? postId;
+  final String? commentId;
+  final String? currentUserId;
 
   const _PostOptionsSheet({
     required this.content,
     this.showDelete = false,
     this.onDelete,
+    this.communityId,
+    this.authorId,
+    this.postId,
+    this.commentId,
+    this.currentUserId,
   });
+
+  /// Check if report option should be shown
+  /// Hide if user is the author or if missing required data
+  bool get _canShowReport {
+    // Don't show report if user is author
+    if (currentUserId != null && authorId != null && currentUserId == authorId) {
+      return false;
+    }
+    // Need communityId and authorId to submit report
+    return communityId != null && authorId != null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -152,17 +189,25 @@ class _PostOptionsSheet extends StatelessWidget {
               },
             ),
           
-          // Destructive item
-          _buildMenuItem(
-            context: context,
-            icon: Icons.report,
-            label: 'Reportar',
-            isDestructive: true,
-            onTap: () {
-              Navigator.of(context).pop();
-              // TODO: Implement report functionality
-            },
-          ),
+          // Report item (hide if user is author)
+          if (_canShowReport)
+            _buildMenuItem(
+              context: context,
+              icon: Icons.flag_outlined,
+              label: 'Reportar',
+              isDestructive: true,
+              onTap: () {
+                Navigator.of(context).pop();
+                showCommunityReportModal(
+                  context: context,
+                  communityId: communityId!,
+                  accusedId: authorId!,
+                  postId: postId,
+                  commentId: commentId,
+                );
+              },
+            ),
+
           
           const SizedBox(height: 12),
         ],

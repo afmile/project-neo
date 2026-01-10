@@ -5,6 +5,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../domain/entities/wall_post.dart';
 import '../../domain/entities/wall_post_comment.dart';
@@ -309,7 +310,14 @@ class _BentoPostCardState extends State<BentoPostCard> {
           
           // Menu button (3 dots)
           IconButton(
-            onPressed: () => showPostOptionsSheet(context, content: widget.post.content),
+            onPressed: () => showPostOptionsSheet(
+              context,
+              content: widget.post.content,
+              communityId: widget.post.communityId,
+              authorId: widget.post.authorId,
+              postId: widget.post.id,
+              currentUserId: Supabase.instance.client.auth.currentUser?.id,
+            ),
             icon: Icon(
               Icons.more_horiz,
               color: Colors.grey[400],

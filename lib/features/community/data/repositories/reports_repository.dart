@@ -54,4 +54,34 @@ class ReportsRepository {
   Future<void> dismissReport(String reportId) async {
     await resolveReport(reportId: reportId, action: 'dismiss');
   }
+
+  /// Create a community-scoped content report
+  /// Submits to the community_reports table for moderation
+  Future<void> createCommunityReport({
+    required String communityId,
+    required String accusedId,
+    required String reason,
+    String? postId,
+    String? commentId,
+  }) async {
+    final userId = _currentUserId;
+    if (userId == null) throw Exception('No autenticado');
+
+    // Validate that at least one target is provided
+    if (postId == null && commentId == null) {
+      throw Exception('Debe especificar un post o comentario a reportar');
+    }
+
+    await _supabase.from('community_reports').insert({
+      'community_id': communityId,
+      'reporter_id': userId,
+      'accused_id': accusedId,
+      'post_id': postId,
+      'comment_id': commentId,
+      'reason': reason,
+      'status': 'pending',
+    });
+
+    print('🚩 Reporte de comunidad creado: $reason');
+  }
 }
