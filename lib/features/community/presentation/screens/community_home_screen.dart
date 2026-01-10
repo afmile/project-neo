@@ -207,6 +207,33 @@ class _CommunityHomeScreenState extends ConsumerState<CommunityHomeScreen>
           communityId: widget.community.id,
           iconColor: Colors.white,
         ),
+        // Global Admin Badge (God Mode indicator)
+        if (ref.read(authProvider).user?.isGlobalAdmin == true)
+          Container(
+            margin: const EdgeInsets.only(right: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFF6B6B).withOpacity(0.2),
+              border: Border.all(color: const Color(0xFFFF6B6B), width: 1.5),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.security, color: Color(0xFFFF6B6B), size: 14),
+                const SizedBox(width: 4),
+                Text(
+                  'ADMIN',
+                  style: TextStyle(
+                    color: const Color(0xFFFF6B6B),
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
         // Settings (visible to global admins, leaders, and moderators)
         if (_canAccessManagement())
           IconButton(
