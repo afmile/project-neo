@@ -19,6 +19,7 @@ class UserModel extends UserEntity {
     super.neocoinsBalance,
     super.isVip,
     super.vipExpiry,
+    super.isGlobalAdmin,
     required super.createdAt,
   });
   
